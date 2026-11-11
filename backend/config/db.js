@@ -12,7 +12,10 @@ const pool = mysql.createPool({
   connectionLimit: 15,
   queueLimit: 0,
   timezone: 'Z',
-  dateStrings: true
+  dateStrings: true,
+  ssl: (process.env.DB_SSL === 'true' || Number(process.env.DB_PORT) === 4000 || (process.env.DB_HOST && process.env.DB_HOST.includes('tidbcloud.com'))) ? {
+    rejectUnauthorized: false
+  } : undefined
 });
 
 // Test connection on startup

@@ -8,7 +8,7 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
   const [hasWarnedOneMin, setHasWarnedOneMin] = useState(false);
   const [showWarningBanner, setShowWarningBanner] = useState(null); // 'five_min' | 'one_min' | null
   const timerRef = useRef(null);
-
+ 
   // Synchronize with server time every 30 seconds to prevent clock drift/tampering
   useEffect(() => {
     setSecondsLeft(initialRemainingSeconds);
