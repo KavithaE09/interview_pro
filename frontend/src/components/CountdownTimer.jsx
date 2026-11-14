@@ -25,7 +25,10 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
           }
         }
       } catch (err) {
-        console.error('Timer sync error:', err);
+        c
+        
+        
+        onsole.error('Timer sync error:', err);
       }
     };
 
