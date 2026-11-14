@@ -100,6 +100,11 @@ function App() {
           {/* Assessment Results Breakdown */}
           <Route path="/results/:attemptId" element={<AssessmentResults />} />
 
+          {/* Candidate Dashboard & Profile (for candidate accounts) */}
+          <Route path="/candidate/login" element={<CandidateLoginRoute><CandidateLogin /></CandidateLoginRoute>} />
+          <Route path="/dashboard" element={<CandidateDashboard />} />
+          <Route path="/profile" element={<CandidateProfile />} />
+
           {/* ========================================================= */}
           {/* ADMINISTRATOR FLOW (Strict URL: /admin/login)             */}
           {/* ========================================================= */}
