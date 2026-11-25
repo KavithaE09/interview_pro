@@ -96,9 +96,9 @@ const TakeAssessment = () => {
       return;
     }
 
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(candidateEmail)) {
-      setError('Please enter a valid email address (e.g. name@example.com).');
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (!gmailRegex.test(candidateEmail.toLowerCase())) {
+      setError('Please enter a valid Gmail address (must end with @gmail.com).');
       return;
     }
 

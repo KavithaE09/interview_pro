@@ -31,9 +31,10 @@ const CandidateLogin = () => {
       return;
     }
 
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!emailRegex.test(email.trim())) {
-      setError('Please enter a valid email address (e.g. name@example.com).');
+    const trimmedEmail = email.trim().toLowerCase();
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (!gmailRegex.test(trimmedEmail)) {
+      setError('Please enter a valid Gmail address (must end with @gmail.com).');
       return;
     }
 
@@ -178,7 +179,7 @@ const CandidateLogin = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="candidate@example.com"
+                placeholder="candidate@gmail.com"
                 required
                 style={{
                   width: '100%',
@@ -197,7 +198,7 @@ const CandidateLogin = () => {
 
           <div>
             <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: '#334155', marginBottom: '0.45rem' }}>
-              Phone Number <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>(Optional — 10-digit mobile)</span>
+              Phone Number
             </label>
             <div style={{ position: 'relative' }}>
               <Phone size={18} color="#64748b" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />

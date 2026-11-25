@@ -264,6 +264,13 @@ const candidateLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: emailValidation.message });
     }
     const emailTrimmed = emailValidation.email;
+
+    if (!emailTrimmed.endsWith('@gmail.com')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please enter a valid Gmail address (must end with @gmail.com).' 
+      });
+    }
     const nameTrimmed = name.trim();
 
     // Mobile number validation: optional, but if entered, must be a valid 10-digit number

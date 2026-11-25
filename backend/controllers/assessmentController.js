@@ -74,6 +74,13 @@ const startDirectAssessment = async (req, res) => {
       return res.status(400).json({ success: false, message: emailV.message });
     }
 
+    if (!emailV.email.endsWith('@gmail.com')) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please enter a valid Gmail address (must end with @gmail.com).' 
+      });
+    }
+
     const phoneV = validatePhone(phone, false);
     if (!phoneV.isValid) {
       return res.status(400).json({ success: false, message: phoneV.message });
