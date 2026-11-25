@@ -4,26 +4,7 @@ import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import Modal from '../components/Modal';
-import {
-  FileCheck,
-  PlusCircle,
-  Edit2,
-  Trash2,
-  HelpCircle,
-  UserPlus,
-  Clock,
-  Award,
-  Layers,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  AlertCircle,
-  Link2,
-  BookOpen,
-  Settings,
-  ListOrdered,
-  Users
-} from 'lucide-react';
+import { FileCheck, PlusCircle, Edit2, Trash2, HelpCircle, UserPlus, Clock, CheckCircle2, AlertCircle, Link2, Users, Layers, Settings } from 'lucide-react';
 
 const AssessmentManagement = () => {
   const navigate = useNavigate();
@@ -37,7 +18,7 @@ const AssessmentManagement = () => {
   // Assessment Form Modal State
   const [showModal, setShowModal] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState(null);
-  const [activeModalTab, setActiveModalTab] = useState('settings'); // 'settings' | 'questions'
+  const [activeModalTab, setActiveModalTab] = useState('settings'); 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -372,9 +353,7 @@ const AssessmentManagement = () => {
               <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                 MCQ Assessment Management
               </h1>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.925rem', marginTop: '0.25rem' }}>
-                Create, configure time limits, manage 4-choice questions, and publish interview rounds.
-              </p>
+             
             </div>
 
             <button

@@ -4,29 +4,14 @@ import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import Modal from '../components/Modal';
-import {
-  Users,
-  Search,
-  UserCheck,
-  Award,
-  FileCheck,
-  History,
-  CheckCircle2,
-  XCircle,
-  PlusCircle,
-  ArrowRight,
-  AlertCircle,
-  ClipboardList,
-  BookOpen,
-  Clock,
-  User
-} from 'lucide-react';
+import {Search,History,CheckCircle2,PlusCircle,AlertCircle,ClipboardList,BookOpen} from 'lucide-react';
 
 
 const CandidateManagement = () => {
   const navigate = useNavigate();
   const [candidates, setCandidates] = useState([]);
   const [assessments, setAssessments] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,15 +23,29 @@ const CandidateManagement = () => {
   const [candidateHistory, setCandidateHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Assign Assessment Modal
+  // Assign Modal
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignMode, setAssignMode] = useState('category'); // 'category' or 'assessment'
   const [assignAssessmentId, setAssignAssessmentId] = useState('');
+  const [assignCategoryId, setAssignCategoryId] = useState('');
   const [assignLoading, setAssignLoading] = useState(false);
 
   useEffect(() => {
     fetchCandidates();
     fetchAssessments();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await api.get('/admin/categories');
+      if (res.data.success) {
+        setCategories(res.data.categories || []);
+      }
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+    }
+  };
 
   const fetchCandidates = async (searchTerm = '') => {
     try {
@@ -98,6 +97,8 @@ const CandidateManagement = () => {
 
   const openAssignModal = (cand) => {
     setSelectedCandidate(cand);
+    setAssignMode('category');
+    setAssignCategoryId(categories.length > 0 ? categories[0].id : '');
     setAssignAssessmentId(assessments.length > 0 ? assessments[0].id : '');
     setError('');
     setShowAssignModal(true);
@@ -105,26 +106,47 @@ const CandidateManagement = () => {
 
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
-    if (!assignAssessmentId) {
-      setError('Please select an assessment to assign.');
-      return;
-    }
 
-    try {
-      setAssignLoading(true);
-      await api.post('/admin/assign', {
-        assessmentId: assignAssessmentId,
-        candidateIds: [selectedCandidate.id]
-      });
-
-      setSuccessMsg(`Assessment successfully assigned to ${selectedCandidate.name}!`);
-      setShowAssignModal(false);
-      fetchCandidates(search);
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to assign assessment.');
-    } finally {
-      setAssignLoading(false);
+    if (assignMode === 'category') {
+      if (!assignCategoryId) {
+        setError('Please select a category to assign.');
+        return;
+      }
+      try {
+        setAssignLoading(true);
+        const res = await api.post('/admin/assign-category', {
+          categoryId: assignCategoryId,
+          candidateIds: [selectedCandidate.id]
+        });
+        setSuccessMsg(res.data.message || `All assessments from category assigned to ${selectedCandidate.name}!`);
+        setShowAssignModal(false);
+        fetchCandidates(search);
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to assign category assessments.');
+      } finally {
+        setAssignLoading(false);
+      }
+    } else {
+      if (!assignAssessmentId) {
+        setError('Please select an assessment to assign.');
+        return;
+      }
+      try {
+        setAssignLoading(true);
+        await api.post('/admin/assign', {
+          assessmentId: assignAssessmentId,
+          candidateIds: [selectedCandidate.id]
+        });
+        setSuccessMsg(`Assessment successfully assigned to ${selectedCandidate.name}!`);
+        setShowAssignModal(false);
+        fetchCandidates(search);
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to assign assessment.');
+      } finally {
+        setAssignLoading(false);
+      }
     }
   };
 
@@ -141,9 +163,7 @@ const CandidateManagement = () => {
               <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                 Candidate Management
               </h1>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.925rem', marginTop: '0.25rem' }}>
-                View registered interview candidates, allocate assessments, and inspect performance transcripts.
-              </p>
+             
             </div>
           </div>
 
@@ -466,72 +486,153 @@ const CandidateManagement = () => {
             </div>
           </div>
 
-          {/* Assessment Selector */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              color: '#334155',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              marginBottom: '0.5rem'
-            }}>
-              Select Assessment Round *
-            </label>
-            <div style={{ position: 'relative' }}>
-              <ClipboardList size={16} style={{
-                position: 'absolute', left: '12px', top: '50%',
-                transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none'
-              }} />
-              <select
-                value={assignAssessmentId}
-                onChange={(e) => setAssignAssessmentId(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  height: '46px',
-                  paddingLeft: '2.5rem',
-                  paddingRight: '1rem',
-                  fontSize: '0.9rem',
-                  color: '#0f172a',
-                  background: '#f8fafc',
-                  border: '1.5px solid #e2e8f0',
-                  borderRadius: '10px',
-                  outline: 'none',
-                  cursor: 'pointer',
-                  appearance: 'none',
-                  fontFamily: 'inherit',
-                  transition: 'border-color 0.2s, box-shadow 0.2s'
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = '#6366f1';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)';
-                  e.target.style.background = '#ffffff';
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = 'none';
-                  e.target.style.background = '#f8fafc';
-                }}
-              >
-                {assessments.map(asm => (
-                  <option key={asm.id} value={asm.id}>
-                    {asm.title} — {asm.category_name || 'General'} · {asm.duration_minutes} Mins
-                  </option>
-                ))}
-              </select>
-              {/* Custom chevron */}
-              <div style={{
-                position: 'absolute', right: '12px', top: '50%',
-                transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8'
+          {/* Assignment Mode Toggle */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.25rem', background: '#f1f5f9', borderRadius: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setAssignMode('category')}
+              style={{
+                padding: '0.6rem 0.5rem',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: assignMode === 'category' ? '#ffffff' : 'transparent',
+                color: assignMode === 'category' ? '#4f46e5' : '#64748b',
+                boxShadow: assignMode === 'category' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              Assign by Category
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssignMode('assessment')}
+              style={{
+                padding: '0.6rem 0.5rem',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: assignMode === 'assessment' ? '#ffffff' : 'transparent',
+                color: assignMode === 'assessment' ? '#4f46e5' : '#64748b',
+                boxShadow: assignMode === 'assessment' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.2s'
+              }}
+            >
+              Single Assessment
+            </button>
+          </div>
+
+          {assignMode === 'category' ? (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#334155',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                marginBottom: '0.5rem'
               }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
+                Select Category *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <BookOpen size={16} style={{
+                  position: 'absolute', left: '12px', top: '50%',
+                  transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none'
+                }} />
+                <select
+                  value={assignCategoryId}
+                  onChange={(e) => setAssignCategoryId(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    height: '46px',
+                    paddingLeft: '2.5rem',
+                    paddingRight: '1rem',
+                    fontSize: '0.9rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '10px',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    fontFamily: 'inherit'
+                  }}
+                >
+                  <option value="">-- Choose Category --</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.category_name}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.4rem', margin: '0.4rem 0 0 0' }}>
+                All published assessments belonging to this category will be assigned to this candidate.
+              </p>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                color: '#334155',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                marginBottom: '0.5rem'
+              }}>
+                Select Assessment Round *
+              </label>
+              <div style={{ position: 'relative' }}>
+                <ClipboardList size={16} style={{
+                  position: 'absolute', left: '12px', top: '50%',
+                  transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none'
+                }} />
+                <select
+                  value={assignAssessmentId}
+                  onChange={(e) => setAssignAssessmentId(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    height: '46px',
+                    paddingLeft: '2.5rem',
+                    paddingRight: '1rem',
+                    fontSize: '0.9rem',
+                    color: '#0f172a',
+                    background: '#f8fafc',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '10px',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    fontFamily: 'inherit'
+                  }}
+                >
+                  {assessments.map((asm) => (
+                    <option key={asm.id} value={asm.id}>
+                      {asm.title} — {asm.category_name || 'General'} · {asm.duration_minutes} Mins
+                    </option>
+                  ))}
+                </select>
+                <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94a3b8' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Buttons */}
           <div style={{ display: 'flex', gap: '0.75rem' }}>

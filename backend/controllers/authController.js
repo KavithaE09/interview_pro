@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { validateEmail, validatePhone } = require('../utils/validators');
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -16,17 +17,23 @@ const register = async (req, res) => {
     const { name, email, phone, password, confirmPassword } = req.body;
 
     // Field validations
-    if (!name || !email || !phone || !password || !confirmPassword) {
-      return res.status(400).json({ success: false, message: 'All registration fields are required.' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Full name is required.' });
     }
 
-    const emailTrimmed = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailTrimmed)) {
-      return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      return res.status(400).json({ success: false, message: emailValidation.message });
     }
+    const emailTrimmed = emailValidation.email;
 
-    if (password.length < 6) {
+    const phoneValidation = validatePhone(phone, false);
+    if (!phoneValidation.isValid) {
+      return res.status(400).json({ success: false, message: phoneValidation.message });
+    }
+    const validatedPhone = phoneValidation.phone;
+
+    if (!password || password.length < 6) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
     }
 
@@ -47,14 +54,14 @@ const register = async (req, res) => {
     // Insert user as candidate
     const [result] = await pool.query(
       'INSERT INTO users (name, email, phone, password_hash, role) VALUES (?, ?, ?, ?, "candidate")',
-      [name.trim(), emailTrimmed, phone.trim(), passwordHash]
+      [name.trim(), emailTrimmed, validatedPhone, passwordHash]
     );
 
     const newUser = {
       id: result.insertId,
       name: name.trim(),
       email: emailTrimmed,
-      phone: phone.trim(),
+      phone: validatedPhone,
       role: 'candidate'
     };
 
@@ -90,7 +97,12 @@ const login = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
     }
 
-    const emailTrimmed = email.trim().toLowerCase();
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      return res.status(400).json({ success: false, message: emailValidation.message });
+    }
+    const emailTrimmed = emailValidation.email;
+
     const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [emailTrimmed]);
 
     if (users.length === 0) {
@@ -143,11 +155,24 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { name, phone } = req.body;
-    if (!name || !phone) {
-      return res.status(400).json({ success: false, message: 'Name and phone are required.' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Full name is required.' });
     }
 
-    await pool.query('UPDATE users SET name = ?, phone = ? WHERE id = ?', [name.trim(), phone.trim(), req.user.id]);
+    let validatedPhone = null;
+    if (phone !== undefined && phone !== null && String(phone).trim() !== '') {
+      const phoneValidation = validatePhone(phone, false);
+      if (!phoneValidation.isValid) {
+        return res.status(400).json({ success: false, message: phoneValidation.message });
+      }
+      validatedPhone = phoneValidation.phone;
+    }
+
+    await pool.query('UPDATE users SET name = ?, phone = ? WHERE id = ?', [
+      name.trim(),
+      validatedPhone,
+      req.user.id
+    ]);
 
     const [rows] = await pool.query('SELECT id, name, email, phone, role, created_at FROM users WHERE id = ?', [req.user.id]);
     return res.status(200).json({ success: true, message: 'Profile updated successfully.', user: rows[0] });
@@ -162,25 +187,30 @@ const registerAdmin = async (req, res) => {
   try {
     const { name, email, phone, password, confirmPassword } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Full name, email, and password are required.' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Administrator full name is required.' });
     }
 
-    const emailTrimmed = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailTrimmed)) {
-      return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      return res.status(400).json({ success: false, message: emailValidation.message });
     }
+    const emailTrimmed = emailValidation.email;
 
-    if (password.length < 6) {
+    // Admin phone validation (optional or if provided must be valid)
+    const phoneValidation = validatePhone(phone, false);
+    if (!phoneValidation.isValid) {
+      return res.status(400).json({ success: false, message: phoneValidation.message });
+    }
+    const validatedPhone = phoneValidation.phone;
+
+    if (!password || password.length < 6) {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
     }
 
     if (confirmPassword && password !== confirmPassword) {
       return res.status(400).json({ success: false, message: 'Passwords do not match.' });
     }
-
-    const phoneTrimmed = phone && phone.trim() ? phone.trim() : '0000000000';
 
     // Check for duplicate email
     const [existing] = await pool.query('SELECT id FROM users WHERE email = ?', [emailTrimmed]);
@@ -195,14 +225,14 @@ const registerAdmin = async (req, res) => {
     // Insert user as admin
     const [result] = await pool.query(
       'INSERT INTO users (name, email, phone, password_hash, role) VALUES (?, ?, ?, ?, "admin")',
-      [name.trim(), emailTrimmed, phoneTrimmed, passwordHash]
+      [name.trim(), emailTrimmed, validatedPhone, passwordHash]
     );
 
     const newAdmin = {
       id: result.insertId,
       name: name.trim(),
       email: emailTrimmed,
-      phone: phoneTrimmed,
+      phone: validatedPhone,
       role: 'admin'
     };
 
@@ -220,10 +250,100 @@ const registerAdmin = async (req, res) => {
   }
 };
 
+// Candidate Quick Login (No registration or password needed - just Name & Email, Phone is Optional)
+const candidateLogin = async (req, res) => {
+  try {
+    const { name, email, phone } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Candidate full name is required.' });
+    }
+
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      return res.status(400).json({ success: false, message: emailValidation.message });
+    }
+    const emailTrimmed = emailValidation.email;
+    const nameTrimmed = name.trim();
+
+    // Mobile number validation: optional, but if entered, must be a valid 10-digit number
+    const phoneValidation = validatePhone(phone, false);
+    if (!phoneValidation.isValid) {
+      return res.status(400).json({ success: false, message: phoneValidation.message });
+    }
+    const validatedPhone = phoneValidation.phone; // valid 10-digit string OR null
+
+    // Check if candidate exists
+    const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [emailTrimmed]);
+    let candidateUser;
+
+    if (existing.length > 0) {
+      candidateUser = existing[0];
+      // Only update phone if candidate explicitly entered a valid phone number
+      if (validatedPhone) {
+        await pool.query('UPDATE users SET name = ?, phone = ? WHERE id = ?', [
+          nameTrimmed,
+          validatedPhone,
+          candidateUser.id
+        ]);
+        candidateUser.phone = validatedPhone;
+      } else {
+        await pool.query('UPDATE users SET name = ? WHERE id = ?', [
+          nameTrimmed,
+          candidateUser.id
+        ]);
+      }
+      candidateUser.name = nameTrimmed;
+    } else {
+      const [insertResult] = await pool.query(
+        'INSERT INTO users (name, email, phone, role) VALUES (?, ?, ?, "candidate")',
+        [nameTrimmed, emailTrimmed, validatedPhone]
+      );
+      candidateUser = {
+        id: insertResult.insertId,
+        name: nameTrimmed,
+        email: emailTrimmed,
+        phone: validatedPhone,
+        role: 'candidate'
+      };
+
+      // Auto-assign any active published assessments to new candidate
+      const [publishedAssessments] = await pool.query('SELECT id FROM assessments WHERE status = "published"');
+      for (const asm of publishedAssessments) {
+        await pool.query(
+          'INSERT IGNORE INTO assessment_assignments (assessment_id, candidate_id, status) VALUES (?, ?, "assigned")',
+          [asm.id, candidateUser.id]
+        );
+      }
+    }
+
+    const userPayload = {
+      id: candidateUser.id,
+      name: candidateUser.name,
+      email: candidateUser.email,
+      phone: candidateUser.phone,
+      role: 'candidate'
+    };
+
+    const token = generateToken(userPayload);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Candidate session started successfully.',
+      token,
+      user: userPayload
+    });
+  } catch (error) {
+    console.error('Candidate login error:', error);
+    return res.status(500).json({ success: false, message: 'Server error during candidate login.' });
+  }
+};
+
 module.exports = {
   register,
   registerAdmin,
   login,
+  candidateLogin,
   getProfile,
   updateProfile
 };

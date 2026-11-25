@@ -1,18 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import Navbar from '../components/Navbar';
-import Sidebar from '../components/Sidebar';
-import {
-  Send,
-  ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
-  Clock,
-  Layers,
-  HelpCircle,
-  Award
-} from 'lucide-react';
+import { Send, ArrowLeft, AlertTriangle } from 'lucide-react';
 
 const ConfirmSubmit = () => {
   const { attemptId } = useParams();
@@ -89,28 +78,70 @@ const ConfirmSubmit = () => {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
-      <header style={{
+      <style>{`
+        @media (max-width: 768px) {
+          .confirm-header {
+            height: auto !important;
+            padding: 0.75rem 1rem !important;
+            flex-wrap: wrap !important;
+            gap: 0.75rem !important;
+          }
+          .confirm-header-title {
+            display: none !important;
+          }
+          .confirm-card {
+            padding: 1.5rem !important;
+          }
+          .confirm-actions {
+            flex-direction: column-reverse !important;
+            gap: 0.75rem !important;
+          }
+          .confirm-actions button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .confirm-wrapper {
+            margin: 1rem auto !important;
+            padding: 0 1rem !important;
+          }
+          .confirm-card {
+            padding: 1.25rem 1rem !important;
+          }
+          .confirm-hero-title {
+            font-size: 1.4rem !important;
+          }
+        }
+      `}</style>
+      <header className="confirm-header" style={{
         height: '66px', backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0',
         padding: '0 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 40, boxShadow: '0 1px 3px rgba(15,23,42,0.03)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-          <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>InterviewPro</span>
-          <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: '#eef2ff', color: '#4f46e5', border: '1px solid #e0e7ff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <img
+            src="/logo.png"
+            alt="Med Manor Organics"
+            style={{ height: '42px', maxWidth: '160px', objectFit: 'contain' }}
+          />
+          <div style={{ height: '20px', width: '1px', background: '#e2e8f0' }}></div>
+          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>InterviewPro</span>
+          <span style={{ padding: '0.2rem 0.55rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', background: '#eef2ff', color: '#4f46e5', border: '1px solid #e0e7ff' }}>
             Assessment Portal
           </span>
         </div>
-        <div style={{ fontSize: '0.825rem', color: '#64748b', fontWeight: 600 }}>
+        <div className="confirm-header-title" style={{ fontSize: '0.825rem', color: '#64748b', fontWeight: 600 }}>
           {assessment?.title}
         </div>
       </header>
 
-      <div style={{ flex: 1, maxWidth: '800px', width: '100%', margin: '2.5rem auto', padding: '0 1.5rem' }}>
+      <div className="confirm-wrapper" style={{ flex: 1, maxWidth: '800px', width: '100%', margin: '2.5rem auto', padding: '0 1.5rem' }}>
           <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
             <span className="badge badge-warning" style={{ fontSize: '0.85rem', padding: '0.4rem 0.9rem', marginBottom: '0.75rem' }}>
               Final Review Step
             </span>
-            <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+            <h1 className="confirm-hero-title" style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
               Confirm Assessment Submission
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
@@ -118,7 +149,7 @@ const ConfirmSubmit = () => {
             </p>
           </div>
 
-          <div style={{
+          <div className="confirm-card" style={{
             background: 'var(--bg-card)',
             padding: '2.5rem',
             borderRadius: 'var(--radius-lg)',
@@ -126,7 +157,7 @@ const ConfirmSubmit = () => {
             boxShadow: 'var(--shadow-md)',
             marginBottom: '2rem'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', marginBottom: '1.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', marginBottom: '1.75rem', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
                 <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)', marginBottom: '0.25rem' }}>{assessment?.title}</h3>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Category: {assessment?.categoryName}</span>
@@ -139,7 +170,7 @@ const ConfirmSubmit = () => {
             {/* Metrics Grid */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
               gap: '1rem',
               marginBottom: '2rem'
             }}>
@@ -180,7 +211,7 @@ const ConfirmSubmit = () => {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="confirm-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button
                 onClick={() => navigate(`/interview/${attemptId}`)}
                 className="btn btn-secondary"

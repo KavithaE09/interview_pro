@@ -1,396 +1,624 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
-import Sidebar from '../components/Sidebar';
 import {
-  FileCheck,
+  Play,
+  CheckCircle2,
   Clock,
   Award,
-  CheckCircle2,
-  XCircle,
-  Play,
-  ArrowRight,
-  TrendingUp,
+  BookOpen,
+  FileCheck,
+  ExternalLink,
+  ChevronRight,
+  Sparkles,
+  FileText,
   AlertCircle,
   HelpCircle,
-  Layers
+  RotateCcw
 } from 'lucide-react';
 
 const CandidateDashboard = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  const [assessments, setAssessments] = useState([]);
-  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [startingId, setStartingId] = useState(null);
   const [error, setError] = useState('');
+  const [modules, setModules] = useState([]);
+  const [assessments, setAssessments] = useState([]);
+  const [selectedModule, setSelectedModule] = useState(null);
+  const [completingId, setCompletingId] = useState(null);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboard();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboard = async () => {
     try {
       setLoading(true);
-      const [assRes, histRes] = await Promise.all([
-        api.get('/assessments/my-assessments'),
-        api.get('/assessments/history')
-      ]);
-
-      if (assRes.data.success) {
-        setAssessments(assRes.data.assessments || []);
-      }
-      if (histRes.data.success) {
-        setHistory(histRes.data.history || []);
+      setError('');
+      const res = await api.get('/modules/dashboard');
+      if (res.data.success) {
+        setModules(res.data.modules || []);
+        setAssessments(res.data.assessments || []);
+        if (res.data.modules && res.data.modules.length > 0) {
+          setSelectedModule(res.data.modules[0]);
+        }
       }
     } catch (err) {
-      console.error('Error fetching candidate dashboard data:', err);
-      setError('Failed to load dashboard assessments.');
+      console.error('Error fetching dashboard:', err);
+      setError('Unable to load dashboard data. Please check your connection.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStartInterview = async (assessmentId) => {
+  const handleMarkCompleted = async (moduleId) => {
     try {
-      setStartingId(assessmentId);
-      setError('');
-      const res = await api.post('/assessments/start', { assessmentId });
-      if (res.data.success && res.data.attemptId) {
-        navigate(`/interview/${res.data.attemptId}`);
+      setCompletingId(moduleId);
+      const res = await api.post(`/modules/${moduleId}/complete`);
+      if (res.data.success) {
+        setModules((prev) =>
+          prev.map((m) =>
+            m.id === moduleId ? { ...m, is_completed: 1, completed_at: new Date().toISOString() } : m
+          )
+        );
+        if (selectedModule?.id === moduleId) {
+          setSelectedModule((prev) => ({ ...prev, is_completed: 1 }));
+        }
       }
     } catch (err) {
-      const msg = err.response?.data?.message || 'Could not start assessment.';
-      setError(msg);
-      // If already completed or attempt exists, navigate to results if provided
-      if (err.response?.data?.attemptId && err.response?.data?.isCompleted) {
-        navigate(`/results/${err.response.data.attemptId}`);
-      }
+      console.error('Error completing module:', err);
     } finally {
-      setStartingId(null);
+      setCompletingId(null);
     }
   };
 
-  // Compute summary metrics
-  const activeAssessments = assessments.filter(a => a.assignment_status !== 'completed' && a.attempt_status !== 'submitted' && a.attempt_status !== 'auto_submitted');
-  const completedAttempts = history.length;
-  const passedAttempts = history.filter(h => h.isPassed).length;
-  const avgScore = completedAttempts > 0 
-    ? Math.round(history.reduce((acc, h) => acc + h.percentage, 0) / completedAttempts) 
-    : 0;
+  const handleStartAssessment = (assessmentId) => {
+    navigate(`/take-test/${assessmentId}`);
+  };
+
+  const completedModulesCount = modules.filter((m) => m.is_completed).length;
+  const completedAssessmentsCount = assessments.filter(
+    (a) => a.attempt_status === 'submitted' || a.attempt_status === 'auto_submitted'
+  ).length;
 
   return (
-    <div className="app-container">
-      <Sidebar />
-      <div className="main-content">
-        <Navbar />
+    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', color: 'var(--text-main)' }}>
+      <style>{`
+        @media (max-width: 860px) {
+          .dashboard-module-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .dashboard-stepper {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 0.75rem !important;
+            padding: 1rem 1.15rem !important;
+          }
+          .dashboard-stepper-divider {
+            display: none !important;
+          }
+          .dashboard-welcome-banner {
+            padding: 1.25rem !important;
+          }
+        }
+        @media (max-width: 540px) {
+          .dashboard-assessments-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+      <Navbar />
 
-        <div className="page-body">
-          {/* Welcome Banner */}
-          <div className="welcome-banner" style={{
-            background: 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)',
-            color: '#ffffff',
-            padding: '2rem 2.5rem',
-            borderRadius: 'var(--radius-lg)',
-            marginBottom: '2rem',
-            boxShadow: '0 10px 25px -5px rgba(124, 58, 237, 0.25)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '1.5rem'
-          }}>
-            <div>
-              <span style={{ 
-                background: 'rgba(255, 255, 255, 0.2)', 
-                padding: '0.25rem 0.75rem', 
-                borderRadius: '9999px', 
-                fontSize: '0.78rem', 
-                fontWeight: 600,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase'
-              }}>
-                Round 1 MCQ Assessment System
-              </span>
-              <h1 style={{ color: '#ffffff', fontSize: '1.85rem', marginTop: '0.6rem', marginBottom: '0.4rem', fontWeight: 700 }}>
-                Welcome, {user?.name}! 👋
-              </h1>
-              <p style={{ color: '#e0e7ff', fontSize: '0.975rem', maxWidth: '620px', lineHeight: 1.5 }}>
-                Attend your assigned multiple-choice interview rounds below within the configured time limit. Answers are automatically evaluated upon submission.
-              </p>
-            </div>
-            <div>
-              <button 
-                onClick={() => navigate('/assessments')} 
-                className="btn btn-secondary" 
-                style={{ 
-                  backgroundColor: '#ffffff', 
-                  color: 'var(--primary)', 
-                  fontWeight: 600, 
-                  boxShadow: 'var(--shadow-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <span>Browse All Rounds</span>
-                <ArrowRight size={16} />
-              </button>
-            </div>
+      <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem' }}>
+        {/* Candidate Flow Stepper */}
+        <div className="dashboard-stepper" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '1rem',
+          marginBottom: '2rem',
+          background: '#ffffff',
+          padding: '0.9rem 1.5rem',
+          borderRadius: '14px',
+          border: '1.5px solid var(--border-light, #e2e8f0)',
+          boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.05)',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#16a34a', fontWeight: 700, fontSize: '0.85rem' }}>
+            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>✓</span>
+            <span>1. Candidate Login</span>
           </div>
-
-          {error && (
-            <div style={{
-              background: 'var(--danger-light)',
-              border: '1px solid var(--danger-border)',
-              color: 'var(--danger)',
-              padding: '0.85rem 1.25rem',
-              borderRadius: 'var(--radius-md)',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem'
-            }}>
-              <AlertCircle size={20} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Quick Stats Grid */}
-          <div className="stats-grid" style={{ marginBottom: '2.5rem' }}>
-            <div className="stat-card">
-              <div className="stat-icon" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
-                <FileCheck size={22} />
-              </div>
-              <div className="stat-content">
-                <span className="stat-label">Available Rounds</span>
-                <span className="stat-value">{activeAssessments.length}</span>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon" style={{ backgroundColor: 'var(--teal-light)', color: 'var(--teal)' }}>
-                <CheckCircle2 size={22} />
-              </div>
-              <div className="stat-content">
-                <span className="stat-label">Completed Rounds</span>
-                <span className="stat-value">{completedAttempts}</span>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon" style={{ backgroundColor: 'var(--success-light)', color: 'var(--success)' }}>
-                <Award size={22} />
-              </div>
-              <div className="stat-content">
-                <span className="stat-label">Rounds Cleared</span>
-                <span className="stat-value">{passedAttempts}</span>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon" style={{ backgroundColor: 'var(--secondary-light)', color: 'var(--secondary)' }}>
-                <TrendingUp size={22} />
-              </div>
-              <div className="stat-content">
-                <span className="stat-label">Average Score</span>
-                <span className="stat-value">{avgScore}%</span>
-              </div>
-            </div>
+          <div className="dashboard-stepper-divider" style={{ width: '32px', height: '2px', background: 'var(--primary, #4f46e5)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary, #4f46e5)', fontWeight: 800, fontSize: '0.85rem' }}>
+            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', border: '2px solid var(--primary, #4f46e5)' }}>2</span>
+            <span>2. Candidate Dashboard (Current)</span>
           </div>
-
-          {/* Section: Available Interview Assessments */}
-          <div style={{ marginBottom: '3rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div>
-                <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                  Available Interview Assessments
-                </h2>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                  Multiple-choice assessment rounds ready for your attempt.
-                </p>
-              </div>
-            </div>
-
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--text-muted)' }}>
-                <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-                <p>Loading assessment rounds...</p>
-              </div>
-            ) : activeAssessments.length === 0 ? (
-              <div className="empty-state-card" style={{
-                background: 'var(--bg-card)',
-                padding: '3rem',
-                textAlign: 'center',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px dashed var(--border-medium)'
-              }}>
-                <CheckCircle2 size={44} color="var(--success)" style={{ margin: '0 auto 1rem' }} />
-                <h3 style={{ fontSize: '1.15rem', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                  All Assigned Assessments Completed!
-                </h3>
-                <p style={{ color: 'var(--text-muted)', maxWidth: '450px', margin: '0 auto' }}>
-                  You have completed all currently assigned MCQ rounds. Check your assessment history below for scores and detailed performance.
-                </p>
-              </div>
-            ) : (
-              <div className="assessment-grid">
-                {activeAssessments.map(asm => {
-                  const isStarted = asm.attempt_status === 'in_progress' && Number(asm.remaining_seconds) > 0;
-
-                  return (
-                    <div key={asm.assessment_id} className="assessment-card">
-                      <div className="card-top">
-                        <span className="category-tag">
-                          <Layers size={13} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-                          {asm.category_name || 'General Technical'}
-                        </span>
-                        {isStarted ? (
-                          <span className="badge badge-warning">Attempt in Progress</span>
-                        ) : (
-                          <span className="badge badge-primary">Ready to Start</span>
-                        )}
-                      </div>
-
-                      <h3 className="assessment-title">{asm.title}</h3>
-                      <p className="assessment-desc">{asm.description || 'Assesses candidate aptitude and domain expertise.'}</p>
-
-                      <div className="assessment-meta">
-                        <div className="meta-item">
-                          <HelpCircle size={15} />
-                          <span>{asm.question_count || 10} Questions (MCQ)</span>
-                        </div>
-                        <div className="meta-item">
-                          <Clock size={15} />
-                          <span>{asm.duration_minutes} Minutes</span>
-                        </div>
-                        <div className="meta-item">
-                          <Award size={15} />
-                          <span>{asm.passing_marks}/{asm.total_marks} to Pass</span>
-                        </div>
-                      </div>
-
-                      <div className="card-footer">
-                        <button
-                          onClick={() => handleStartInterview(asm.assessment_id)}
-                          disabled={startingId === asm.assessment_id}
-                          className={`btn ${isStarted ? 'btn-warning' : 'btn-primary'} btn-block`}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                        >
-                          <Play size={16} fill="currentColor" />
-                          <span>{isStarted ? 'Resume Interview' : 'Start Interview'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Section: Assessment History */}
-          <div>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                Assessment History & Results
-              </h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                Review scores and breakdown for your completed MCQ interview rounds.
-              </p>
-            </div>
-
-            {history.length === 0 ? (
-              <div style={{
-                background: 'var(--bg-card)',
-                padding: '2.5rem',
-                textAlign: 'center',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-light)',
-                color: 'var(--text-muted)'
-              }}>
-                <Clock size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.5 }} />
-                <p>No completed assessments yet. Complete an interview round to see your score here.</p>
-              </div>
-            ) : (
-              <div className="table-responsive" style={{
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-sm)',
-                border: '1px solid var(--border-light)'
-              }}>
-                <table className="custom-table">
-                  <thead>
-                    <tr>
-                      <th>Assessment Title</th>
-                      <th>Category</th>
-                      <th>Questions</th>
-                      <th>Score Obtained</th>
-                      <th>Percentage</th>
-                      <th>Result Status</th>
-                      <th>Submitted At</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map(item => (
-                      <tr key={item.attempt_id}>
-                        <td>
-                          <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                            {item.assessment_title}
-                          </div>
-                        </td>
-                        <td>
-                          <span className="badge badge-neutral">
-                            {item.category_name || 'General'}
-                          </span>
-                        </td>
-                        <td>{item.total_questions} MCQs</td>
-                        <td>
-                          <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
-                            {item.score} / {item.totalMarks}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ fontWeight: 600 }}>{item.percentage}%</span>
-                        </td>
-                        <td>
-                          {item.isPassed ? (
-                            <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle2 size={13} />
-                              <span>Passed</span>
-                            </span>
-                          ) : (
-                            <span className="badge badge-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <XCircle size={13} />
-                              <span>Needs Improvement</span>
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                          {item.submitted_at ? new Date(item.submitted_at).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td>
-                          <button
-                            onClick={() => navigate(`/results/${item.attempt_id}`)}
-                            className="btn btn-secondary btn-sm"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                          >
-                            <span>View Breakdown</span>
-                            <ArrowRight size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+          <div className="dashboard-stepper-divider" style={{ width: '32px', height: '2px', background: '#cbd5e1' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem' }}>
+            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>3</span>
+            <span>3. Assessment Portal (Next Step)</span>
           </div>
         </div>
-      </div>
+
+        {/* Welcome Banner */}
+        <div className="dashboard-welcome-banner" style={{
+          background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%)',
+          border: '1px solid rgba(79, 70, 229, 0.3)',
+          borderRadius: '1rem',
+          padding: '2rem',
+          marginBottom: '2rem',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1.5rem'
+        }}>
+          <div>
+            
+            <h1 style={{ fontSize: '1.85rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>
+              Welcome, {user?.name || 'Candidate'}!
+            </h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: 0, maxWidth: '650px' }}>
+              Review the training modules and YouTube reference tutorials below. Once you're ready, proceed to take your assigned assessment rounds.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: '0.75rem',
+              padding: '1rem 1.5rem',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>
+                {completedModulesCount} / {modules.length}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                Modules Watched
+              </div>
+            </div>
+
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: '0.75rem',
+              padding: '1rem 1.5rem',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981' }}>
+                {completedAssessmentsCount} / {assessments.length}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                Assessments Done
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{
+            padding: '1rem',
+            borderRadius: '0.75rem',
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            color: '#f87171',
+            marginBottom: '2rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
+            <div className="spinner"></div>
+          </div>
+        ) : (
+          <>
+            {/* Section 1: Learning Modules & YouTube Video Player */}
+            <section style={{ marginBottom: '3rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <div style={{ padding: '0.5rem', borderRadius: '0.5rem', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
+                    <Play size={20} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0 }}>
+                      Learning Modules & YouTube Tutorials
+                    </h2>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Watch the training videos to prepare before starting the assessment
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {modules.length === 0 ? (
+                <div style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '1rem',
+                  padding: '3rem',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)'
+                }}>
+                  <BookOpen size={40} style={{ opacity: 0.4, marginBottom: '1rem' }} />
+                  <p>No learning modules have been published by the administrator yet.</p>
+                </div>
+              ) : (
+                <div className="dashboard-module-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
+                  {/* Active Video Player & Details */}
+                  {selectedModule && (
+                    <div style={{
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '1rem',
+                      overflow: 'hidden',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)'
+                    }}>
+                      {/* Responsive YouTube Embed */}
+                      <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000000' }}>
+                        <iframe
+                          src={selectedModule.video_url}
+                          title={selectedModule.title}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            border: 'none'
+                          }}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+
+                      {/* Video Info & Action Footer */}
+                      <div style={{ padding: '1.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                          {selectedModule.category_name && (
+                            <span style={{
+                              padding: '0.25rem 0.65rem',
+                              borderRadius: '0.35rem',
+                              background: 'rgba(79, 70, 229, 0.2)',
+                              color: '#818cf8',
+                              fontSize: '0.75rem',
+                              fontWeight: 700
+                            }}>
+                              {selectedModule.category_name}
+                            </span>
+                          )}
+                          {selectedModule.is_completed ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem',
+                              padding: '0.25rem 0.65rem',
+                              borderRadius: '0.35rem',
+                              background: 'rgba(16, 185, 129, 0.2)',
+                              color: '#10b981',
+                              fontSize: '0.75rem',
+                              fontWeight: 700
+                            }}>
+                              <CheckCircle2 size={13} />
+                              Watched & Completed
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <h3 style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 0.75rem 0' }}>
+                          {selectedModule.title}
+                        </h3>
+
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                          {selectedModule.description || 'Watch the tutorial carefully to master the essential concepts.'}
+                        </p>
+
+                        {/* Resource links */}
+                        {(selectedModule.resource_url || selectedModule.file_name) && (
+                          <div style={{
+                            padding: '0.9rem 1.25rem',
+                            borderRadius: '0.75rem',
+                            background: 'rgba(15, 23, 42, 0.4)',
+                            border: '1px solid var(--border)',
+                            marginBottom: '1.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                              <FileText size={18} color="var(--primary)" />
+                              <div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                                  Study Materials & Cheatsheets
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                  {selectedModule.file_name || 'Downloadable formula reference'}
+                                </div>
+                              </div>
+                            </div>
+                            {selectedModule.resource_url && (
+                              <a
+                                href={selectedModule.resource_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.3rem',
+                                  color: 'var(--primary)',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 600,
+                                  textDecoration: 'none'
+                                }}
+                              >
+                                <span>Open Resource</span>
+                                <ExternalLink size={14} />
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Buttons: Mark Watched & Start Assessment */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                          <button
+                            onClick={() => handleMarkCompleted(selectedModule.id)}
+                            disabled={selectedModule.is_completed || completingId === selectedModule.id}
+                            className={`btn ${selectedModule.is_completed ? 'btn-secondary' : 'btn-outline'}`}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1.25rem' }}
+                          >
+                            <CheckCircle2 size={16} color={selectedModule.is_completed ? '#10b981' : 'currentColor'} />
+                            <span>
+                              {selectedModule.is_completed
+                                ? 'Completed'
+                                : completingId === selectedModule.id
+                                ? 'Saving...'
+                                : 'Mark as Watched'}
+                            </span>
+                          </button>
+
+                          {selectedModule.assessment_id && (
+                            <button
+                              onClick={() => handleStartAssessment(selectedModule.assessment_id)}
+                              className="btn btn-primary"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.75rem 1.5rem',
+                                fontWeight: 700
+                              }}
+                            >
+                              <span>Next: Start {selectedModule.assessment_title || 'Assessment'}</span>
+                              <ChevronRight size={18} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modules List Sidebar */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      All Training Modules ({modules.length})
+                    </div>
+                    {modules.map((m, idx) => {
+                      const isSelected = selectedModule?.id === m.id;
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => setSelectedModule(m)}
+                          style={{
+                            padding: '1rem',
+                            borderRadius: '0.75rem',
+                            background: isSelected ? 'rgba(79, 70, 229, 0.15)' : 'var(--bg-card)',
+                            border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--border)'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.4rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                              Module #{idx + 1}
+                            </span>
+                            {m.is_completed ? (
+                              <CheckCircle2 size={15} color="#10b981" />
+                            ) : (
+                              <Play size={13} color="var(--primary)" />
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>
+                            {m.title}
+                          </div>
+                          {m.category_name && (
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              Category: {m.category_name}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Section 2: Assigned Assessments */}
+            <section>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+                
+                <div>
+                  <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0 }}>
+                    My Assigned Assessments
+                  </h2>
+                 
+                </div>
+              </div>
+
+              {assessments.length === 0 ? (
+                <div style={{
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '1rem',
+                  padding: '3rem',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)'
+                }}>
+                  <HelpCircle size={40} style={{ opacity: 0.4, marginBottom: '1rem' }} />
+                  <p>No assessments currently assigned to your account.</p>
+                </div>
+              ) : (
+                <div className="dashboard-assessments-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                  {assessments.map((asm) => {
+                    const isSubmitted = asm.attempt_status === 'submitted' || asm.attempt_status === 'auto_submitted';
+                    const score = Number(asm.score || 0);
+                    const totalMarks = Number(asm.total_marks || 0);
+                    const isPassed = score >= Number(asm.passing_marks || 0);
+
+                    return (
+                      <div
+                        key={asm.assignment_id || asm.assessment_id}
+                        style={{
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '1rem',
+                          padding: '1.5rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <span style={{
+                              padding: '0.25rem 0.65rem',
+                              borderRadius: '0.35rem',
+                              background: 'rgba(79, 70, 229, 0.15)',
+                              color: 'var(--primary)',
+                              fontSize: '0.75rem',
+                              fontWeight: 700
+                            }}>
+                              {asm.category_name || 'General Assessment'}
+                            </span>
+
+                            {isSubmitted ? (
+                              <span style={{
+                                padding: '0.25rem 0.65rem',
+                                borderRadius: '0.35rem',
+                                background: isPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                color: isPassed ? '#10b981' : '#f87171',
+                                fontSize: '0.75rem',
+                                fontWeight: 700
+                              }}>
+                                Score: {score}/{totalMarks}
+                              </span>
+                            ) : (
+                              <span style={{
+                                padding: '0.25rem 0.65rem',
+                                borderRadius: '0.35rem',
+                                background: 'rgba(14, 165, 233, 0.15)',
+                                color: '#38bdf8',
+                                fontSize: '0.75rem',
+                                fontWeight: 700
+                              }}>
+                                Ready to Start
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '0 0 0.5rem 0' }}>
+                            {asm.title}
+                          </h3>
+
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                            {asm.description || 'Test your proficiency with questions and practical scenarios.'}
+                          </p>
+
+                          <div style={{
+                            display: 'flex',
+                            gap: '1.25rem',
+                            marginBottom: '1.5rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '0.5rem',
+                            background: 'rgba(15, 23, 42, 0.3)',
+                            fontSize: '0.82rem',
+                            color: 'var(--text-muted)'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <Clock size={14} color="var(--primary)" />
+                              <span>{asm.duration_minutes} Mins</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <Award size={14} color="#10b981" />
+                              <span>{asm.total_marks} Marks</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <FileCheck size={14} color="#a855f7" />
+                              <span>{asm.question_count || 0} Questions</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          {isSubmitted ? (
+                            <Link
+                              to={`/results/${asm.latest_attempt_id}`}
+                              className="btn btn-secondary"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                width: '100%',
+                                padding: '0.75rem',
+                                textDecoration: 'none'
+                              }}
+                            >
+                              <span>View Score & Breakdown</span>
+                              <ChevronRight size={16} />
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={() => handleStartAssessment(asm.assessment_id)}
+                              className="btn btn-primary"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                width: '100%',
+                                padding: '0.85rem',
+                                fontWeight: 700,
+                                fontSize: '0.95rem'
+                              }}
+                            >
+                              <span>Proceed to Assessment Portal</span>
+                              <ChevronRight size={18} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </main>
     </div>
   );
 };

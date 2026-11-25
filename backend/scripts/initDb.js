@@ -32,7 +32,6 @@ async function initDatabase() {
     await connection.query(schemaSql);
     console.log('Schema tables created successfully.');
 
-    // 1. Seed Admin & Demo Candidate
     console.log('Seeding administrative and candidate accounts...');
     const adminPasswordHash = await bcrypt.hash('Admin@123', 10);
     const candidatePasswordHash = await bcrypt.hash('Candidate@123', 10);

@@ -1,23 +1,14 @@
 const pool = require('../config/db');
 
-// ==========================================
-// 1. Admin Dashboard Overview Statistics
-// ==========================================
 const getDashboardStats = async (req, res) => {
   try {
-    // Total candidates
+    
     const [candRows] = await pool.query('SELECT COUNT(*) AS total_candidates FROM users WHERE role = "candidate"');
     const totalCandidates = candRows[0].total_candidates;
-
-    // Total assessments
     const [asmRows] = await pool.query('SELECT COUNT(*) AS total_assessments FROM assessments');
     const totalAssessments = asmRows[0].total_assessments;
-
-    // Completed attempts
     const [compRows] = await pool.query('SELECT COUNT(*) AS completed FROM assessment_attempts WHERE status IN ("submitted", "auto_submitted")');
     const completedAttempts = compRows[0].completed;
-
-    // In progress attempts
     const [progRows] = await pool.query('SELECT COUNT(*) AS in_progress FROM assessment_attempts WHERE status = "in_progress"');
     const inProgressAttempts = progRows[0].in_progress;
 
@@ -336,141 +327,83 @@ const togglePublishAssessment = async (req, res) => {
 };
 
 // ==========================================
-// 4. Question Management (MCQ)
+// 4. Question Management
 // ==========================================
-const addMcqQuestion = async (req, res) => {
-  const connection = await pool.getConnection();
+const addQuestion = async (req, res) => {
   try {
-    await connection.beginTransaction();
-
     const {
       assessment_id,
       question_text,
-      marks = 5,
+      marks = 10,
       question_order = 1,
       explanation = '',
-      expected_keywords = '',
-      options = []
+      expected_keywords = ''
     } = req.body;
 
     if (!assessment_id || !question_text || !question_text.trim()) {
-      await connection.rollback();
       return res.status(400).json({ success: false, message: 'Assessment ID and question text are required.' });
     }
 
-    const keywordsStr = Array.isArray(expected_keywords)
-      ? JSON.stringify(expected_keywords)
-      : (typeof expected_keywords === 'string' ? expected_keywords.trim() : '');
-
-    // Insert question
-    const [qResult] = await connection.query(`
+    const [qResult] = await pool.query(`
       INSERT INTO questions (assessment_id, question_text, marks, question_order, explanation, expected_keywords)
       VALUES (?, ?, ?, ?, ?, ?)
     `, [
       assessment_id,
       question_text.trim(),
-      Number(marks) || 1,
+      Number(marks) || 10,
       Number(question_order) || 1,
       explanation || '',
-      keywordsStr || null
+      expected_keywords.trim() || null
     ]);
 
-    const questionId = qResult.insertId;
-
-    // Insert options if provided
-    if (Array.isArray(options) && options.length > 0) {
-      for (const opt of options) {
-        if (opt.option_text && opt.option_text.trim()) {
-          await connection.query(`
-            INSERT INTO question_options (question_id, option_text, is_correct)
-            VALUES (?, ?, ?)
-          `, [questionId, opt.option_text.trim(), opt.is_correct ? 1 : 0]);
-        }
-      }
-    }
-
-    await connection.commit();
     return res.status(201).json({
       success: true,
       message: 'Question added successfully.',
-      questionId
+      questionId: qResult.insertId
     });
   } catch (error) {
-    await connection.rollback();
     console.error('Error adding question:', error);
     return res.status(500).json({ success: false, message: 'Server error adding question.' });
-  } finally {
-    connection.release();
   }
 };
 
-const updateMcqQuestion = async (req, res) => {
-  const connection = await pool.getConnection();
+const updateQuestion = async (req, res) => {
   try {
-    await connection.beginTransaction();
-
     const { id } = req.params;
     const {
       question_text,
       marks,
       question_order,
       explanation,
-      expected_keywords,
-      options = []
+      expected_keywords
     } = req.body;
 
     if (!question_text || !question_text.trim()) {
-      await connection.rollback();
       return res.status(400).json({ success: false, message: 'Question text is required.' });
     }
 
-    let keywordsStr = null;
-    if (expected_keywords !== undefined) {
-      keywordsStr = Array.isArray(expected_keywords)
-        ? JSON.stringify(expected_keywords)
-        : String(expected_keywords).trim();
-    }
-
-    await connection.query(`
+    await pool.query(`
       UPDATE questions
-      SET 
+      SET
         question_text = ?,
         marks = ?,
         question_order = ?,
         explanation = ?,
-        expected_keywords = COALESCE(?, expected_keywords)
+        expected_keywords = ?
       WHERE id = ?
     `, [
       question_text.trim(),
-      Number(marks) || 1,
+      Number(marks) || 10,
       Number(question_order) || 1,
       explanation || '',
-      keywordsStr,
+      expected_keywords !== undefined ? String(expected_keywords).trim() : null,
       id
     ]);
 
-    if (Array.isArray(options) && options.length > 0) {
-      // Delete old options and re-insert updated options
-      await connection.query('DELETE FROM question_options WHERE question_id = ?', [id]);
-
-      for (const opt of options) {
-        if (opt.option_text && opt.option_text.trim()) {
-          await connection.query(`
-            INSERT INTO question_options (question_id, option_text, is_correct)
-            VALUES (?, ?, ?)
-          `, [id, opt.option_text.trim(), opt.is_correct ? 1 : 0]);
-        }
-      }
-    }
-
-    await connection.commit();
     return res.status(200).json({ success: true, message: 'Question updated successfully.' });
   } catch (error) {
-    await connection.rollback();
     console.error('Error updating question:', error);
     return res.status(500).json({ success: false, message: 'Server error updating question.' });
-  } finally {
-    connection.release();
   }
 };
 
@@ -608,6 +541,46 @@ const assignAssessmentToCandidates = async (req, res) => {
   }
 };
 
+const assignCategoryToCandidates = async (req, res) => {
+  try {
+    const { categoryId, candidateIds = [] } = req.body;
+
+    if (!categoryId || !Array.isArray(candidateIds) || candidateIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'Category ID and candidate IDs are required.' });
+    }
+
+    // Find all published assessments in this category
+    const [assessments] = await pool.query(
+      'SELECT id, title FROM assessments WHERE category_id = ? AND status = "published"',
+      [categoryId]
+    );
+
+    if (assessments.length === 0) {
+      return res.status(400).json({ success: false, message: 'No published assessments found in this category.' });
+    }
+
+    let totalAssignments = 0;
+    for (const candId of candidateIds) {
+      for (const asm of assessments) {
+        const [result] = await pool.query(`
+          INSERT INTO assessment_assignments (assessment_id, candidate_id, status)
+          VALUES (?, ?, 'assigned')
+          ON DUPLICATE KEY UPDATE status = status
+        `, [asm.id, candId]);
+        if (result.affectedRows > 0) totalAssignments++;
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Assigned ${assessments.length} assessment(s) in this category to ${candidateIds.length} candidate(s).`
+    });
+  } catch (error) {
+    console.error('Error assigning category to candidates:', error);
+    return res.status(500).json({ success: false, message: 'Server error assigning category to candidates.' });
+  }
+};
+
 // ==========================================
 // 6. Results Management
 // ==========================================
@@ -730,11 +703,12 @@ module.exports = {
   updateAssessment,
   deleteAssessment,
   togglePublishAssessment,
-  addMcqQuestion,
-  updateMcqQuestion,
+  addQuestion,
+  updateQuestion,
   deleteQuestion,
   getAllCandidates,
   getCandidateDetailWithHistory,
   assignAssessmentToCandidates,
+  assignCategoryToCandidates,
   getAllResults
 };

@@ -1,17 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import {
-  Users,
-  FileCheck,
-  PlusCircle,
-  FolderKanban,
-  Award,
-  ArrowRight,
-  ChevronRight
-} from 'lucide-react';
+import { Users, FileCheck, FolderKanban, Award, ArrowRight, PlusCircle, ChevronRight } from 'lucide-react';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -63,25 +55,6 @@ const AdminDashboard = () => {
               <p style={{ color: 'var(--text-muted)', fontSize: '0.925rem', marginTop: '0.25rem' }}>
                 Manage MCQ assessment rounds, question banks, candidate allocations, and evaluation metrics.
               </p>
-            </div>
-
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => navigate('/admin/categories')}
-                className="btn btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-              >
-                <FolderKanban size={16} />
-                <span>Categories</span>
-              </button>
-              <button
-                onClick={() => navigate('/admin/assessments')}
-                className="btn btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-              >
-                <PlusCircle size={16} />
-                <span>Manage Assessments</span>
-              </button>
             </div>
           </div>
 

@@ -2,28 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import {
-  ShieldCheck,
-  Lock,
-  Mail,
-  User,
-  Phone,
-  ArrowRight,
-  UserPlus,
-  LogIn,
-  CheckCircle2,
-  AlertCircle,
-  ArrowLeft
-} from 'lucide-react';
+import {ShieldCheck,Lock,Mail,User,Phone,ArrowRight,UserPlus,LogIn,CheckCircle2,AlertCircle,ArrowLeft} from 'lucide-react';
 
 const AdminLogin = () => {
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
-  
-  // Login fields
+
+  const [mode, setMode] = useState('login'); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Register fields
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -80,13 +65,20 @@ const AdminLogin = () => {
       return;
     }
 
-    if (!regEmail.trim()) {
-      setError('Please provide a valid email address.');
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!regEmail.trim() || !emailRegex.test(regEmail.trim())) {
+      setError('Please provide a valid email address (e.g. admin@company.com).');
       return;
     }
 
     if (!phone.trim()) {
       setError('Please provide a contact phone number.');
+      return;
+    }
+
+    const cleanPhone = phone.trim().replace(/[\s\-\(\)\.]/g, '').replace(/^(\+91|91(?=\d{10}$)|0(?=\d{10}$))/, '');
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      setError('Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).');
       return;
     }
 
@@ -131,11 +123,23 @@ const AdminLogin = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem 1.5rem',
+      padding: '1.5rem 1rem',
       background: 'linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%)',
       fontFamily: 'var(--font-sans)'
     }}>
-      <div style={{
+      <style>{`
+        @media (max-width: 480px) {
+          .admin-login-card {
+            padding: 1.5rem 1.15rem !important;
+            border-radius: 14px !important;
+          }
+          .admin-login-logo {
+            height: 56px !important;
+            max-width: 200px !important;
+          }
+        }
+      `}</style>
+      <div className="admin-login-card" style={{
         maxWidth: mode === 'register' ? '480px' : '440px',
         width: '100%',
         background: '#ffffff',
@@ -145,31 +149,27 @@ const AdminLogin = () => {
         boxShadow: '0 8px 30px -4px rgba(15, 23, 42, 0.08)',
         transition: 'all 0.3s ease'
       }}>
-        {/* Header Icon & Title */}
+       
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{
-            width: '52px',
-            height: '52px',
-            borderRadius: '14px',
-            background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 1rem',
-            color: '#fff',
-            boxShadow: '0 4px 16px rgba(79, 70, 229, 0.3)'
-          }}>
-            <ShieldCheck size={28} />
+          <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+            <img
+              src="/logo.png"
+              alt="Med Manor Organics Logo"
+              className="admin-login-logo"
+              style={{
+                height: '78px',
+                maxWidth: '280px',
+                objectFit: 'contain'
+              }}
+            />
           </div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.3rem', letterSpacing: '-0.02em' }}>
-            Administration Portal
+          <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.3rem', letterSpacing: '-0.02em' }}>
+            Admin Portal
           </h2>
           <p style={{ color: '#64748b', fontSize: '0.875rem', margin: 0 }}>
-            {mode === 'login' ? 'Sign in with administrator credentials' : 'Create a new administrator account'}
+            {mode === 'login' ? 'Sign in with admin credentials' : 'Create a new admin account'}
           </p>
         </div>
-
-        {/* Tab Switcher: Sign In vs Register */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
@@ -268,7 +268,7 @@ const AdminLogin = () => {
           <form onSubmit={handleLoginSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
-                Administrator Email <span style={{ color: '#ef4444' }}>*</span>
+                Admin Email <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Mail size={18} style={{ position: 'absolute', left: '14px', color: '#94a3b8', pointerEvents: 'none' }} />
@@ -309,7 +309,7 @@ const AdminLogin = () => {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
-                Administrator Password <span style={{ color: '#ef4444' }}>*</span>
+                Admin Password <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Lock size={18} style={{ position: 'absolute', left: '14px', color: '#94a3b8', pointerEvents: 'none' }} />
@@ -384,7 +384,7 @@ const AdminLogin = () => {
             {/* Full Name */}
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
-                Full Legal Name <span style={{ color: '#ef4444' }}>*</span>
+                Full Name <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <User size={18} style={{ position: 'absolute', left: '14px', color: '#94a3b8', pointerEvents: 'none' }} />
@@ -415,7 +415,7 @@ const AdminLogin = () => {
             {/* Admin Email */}
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
-                Administrator Email <span style={{ color: '#ef4444' }}>*</span>
+                Admin Email <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Mail size={18} style={{ position: 'absolute', left: '14px', color: '#94a3b8', pointerEvents: 'none' }} />
@@ -443,17 +443,17 @@ const AdminLogin = () => {
               </div>
             </div>
 
-            {/* Contact Phone */}
+            {/* Phone Number */}
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
-                Contact Phone <span style={{ color: '#ef4444' }}>*</span>
+                Phone Number <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Phone size={18} style={{ position: 'absolute', left: '14px', color: '#94a3b8', pointerEvents: 'none' }} />
                 <input
                   type="tel"
                   required
-                  placeholder="e.g. +91 98765 43210"
+                  placeholder="e.g. 9876543210 or +91 9876543210"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   style={{
@@ -472,6 +472,7 @@ const AdminLogin = () => {
                   }}
                 />
               </div>
+              <p style={{ margin: '0.3rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>10-digit Indian mobile number</p>
             </div>
 
             {/* Password */}
@@ -579,7 +580,7 @@ const AdminLogin = () => {
         }}>
           {mode === 'login' ? (
             <p style={{ margin: 0 }}>
-              Need to create a new administrator account?{' '}
+              Need to create a new admin account?{' '}
               <button
                 type="button"
                 onClick={() => handleModeChange('register')}
@@ -598,7 +599,7 @@ const AdminLogin = () => {
             </p>
           ) : (
             <p style={{ margin: 0 }}>
-              Already registered as an administrator?{' '}
+              Already registered as an admin?{' '}
               <button
                 type="button"
                 onClick={() => handleModeChange('login')}
@@ -617,26 +618,7 @@ const AdminLogin = () => {
             </p>
           )}
 
-          <div style={{ marginTop: '1rem' }}>
-            <Link
-              to="/"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                color: '#94a3b8',
-                fontSize: '0.825rem',
-                textDecoration: 'none',
-                fontWeight: 600,
-                transition: 'color 0.2s ease'
-              }}
-              onMouseOver={(e) => { e.currentTarget.style.color = '#475569'; }}
-              onMouseOut={(e) => { e.currentTarget.style.color = '#94a3b8'; }}
-            >
-              <ArrowLeft size={14} />
-              <span>Return to Assessment Portal</span>
-            </Link>
-          </div>
+          
         </div>
       </div>
     </div>

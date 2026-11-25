@@ -2,21 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import {
-  Terminal,
-  Search,
-  Filter,
-  Layers,
-  Clock,
-  HelpCircle,
-  Award,
-  Play,
-  CheckCircle2,
-  AlertCircle,
-  ArrowRight,
-  ShieldCheck,
-  User
-} from 'lucide-react';
+import { Terminal, Search, Clock, HelpCircle, Award, Play, AlertCircle, Layers } from 'lucide-react';
 
 const AvailableAssessments = () => {
   const navigate = useNavigate();
@@ -35,7 +21,7 @@ const AvailableAssessments = () => {
   const fetchAssessments = async () => {
     try {
       setLoading(true);
-      // Fetch public assessments directly without requiring password login
+      
       const res = await api.get('/assessments/public');
       if (res.data.success) {
         setAssessments(res.data.assessments || []);
@@ -67,8 +53,13 @@ const AvailableAssessments = () => {
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
       {/* Top Navbar */}
       <header className="top-navbar" style={{ padding: '1rem 2rem', borderBottom: '1px solid var(--border-light)', backgroundColor: '#ffffff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <Terminal size={24} color="var(--primary)" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <img
+            src="/logo.png"
+            alt="Med Manor Organics"
+            style={{ height: '46px', maxWidth: '190px', objectFit: 'contain' }}
+          />
+          <div style={{ height: '24px', width: '1px', background: 'var(--border-light)' }}></div>
           <span style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>InterviewPro</span>
           <span className="badge badge-primary" style={{ marginLeft: '0.5rem', fontSize: '0.75rem', textTransform: 'uppercase' }}>
             Candidate Portal

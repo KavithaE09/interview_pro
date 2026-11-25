@@ -3,42 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import CountdownTimer from '../components/CountdownTimer';
 import Modal from '../components/Modal';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Bookmark,
-  RotateCcw,
-  Send,
-  AlertTriangle,
-  AlertOctagon,
-  CheckCircle,
-  HelpCircle,
-  Award,
-  Layers,
-  CheckCircle2,
-  FileText,
-  Clock,
-  Camera,
-  CameraOff,
-  Monitor,
-  MonitorOff,
-  ShieldAlert,
-  Mic,
-  MicOff
-} from 'lucide-react';
-
-/* ─── Proctoring state machine ────────────────────────────────
-   PHASE 1 – 'setup'    → camera/mic/screen-share permissions
-   PHASE 2 – 'ready'    → permissions granted, waiting to start
-   PHASE 3 – 'active'   → interview is live with monitoring
-   PHASE 4 – 'terminated' → violation detected, session ended
-──────────────────────────────────────────────────────────────*/
+import {ArrowLeft,ArrowRight,Bookmark,RotateCcw,Send,AlertTriangle,AlertOctagon,Layers,CheckCircle2,FileText,CameraOff, Monitor,MonitorOff,ShieldAlert,Mic} from 'lucide-react';
 
 const McqInterview = () => {
   const { attemptId } = useParams();
   const navigate = useNavigate();
 
-  // ── Assessment State ───────────────────────────────────────
   const [assessment, setAssessment] = useState(null);
   const [attempt, setAttempt] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -52,18 +22,21 @@ const McqInterview = () => {
   const [expiredWarning, setExpiredWarning] = useState(false);
   const saveTimeoutRef = useRef(null);
 
-  // ── Proctoring State ───────────────────────────────────────
-  const [proctoringPhase, setProctoringPhase] = useState('setup'); // setup | ready | active | terminated
-  const [cameraStream, setCameraStream] = useState(null);
-  const [screenStream, setScreenStream] = useState(null);
+  const [proctoringPhase, setProctoringPhase] = useState('setup');
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
   const [hasScreenPermission, setHasScreenPermission] = useState(false);
   const [mediaError, setMediaError] = useState('');
   const [violationReason, setViolationReason] = useState('');
-  const [tabSwitchWarnings, setTabSwitchWarnings] = useState(0);
   const [isTerminating, setIsTerminating] = useState(false);
 
-  // ── Refs for media ─────────────────────────────────────────
+  // Proctoring alerts
+  const [proctoringAlert, setProctoringAlert] = useState(null); // { type, message }
+  const faceWarningsRef = useRef(0);
+  const noFaceWarningsRef = useRef(0);
+  const prevBrightnessRef = useRef(null);
+  const detectionIntervalRef = useRef(null);
+  const alertTimeoutRef = useRef(null);
+
   const cameraVideoRef = useRef(null);
   const screenVideoRef = useRef(null);
   const cameraStreamRef = useRef(null);
@@ -71,9 +44,6 @@ const McqInterview = () => {
   const tabSwitchWarningsRef = useRef(0);
   const isTerminatedRef = useRef(false);
 
-  // ─────────────────────────────────────────────────────────────
-  // PROCTORING: Request Camera + Microphone
-  // ─────────────────────────────────────────────────────────────
   const requestCameraAccess = async () => {
     setMediaError('');
     try {
@@ -82,7 +52,6 @@ const McqInterview = () => {
         audio: true
       });
       cameraStreamRef.current = stream;
-      setCameraStream(stream);
       setHasCameraPermission(true);
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
@@ -94,9 +63,6 @@ const McqInterview = () => {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // PROCTORING: Request Screen Share
-  // ─────────────────────────────────────────────────────────────
   const requestScreenShare = async () => {
     setMediaError('');
     try {
@@ -105,13 +71,11 @@ const McqInterview = () => {
         audio: false
       });
       screenStreamRef.current = stream;
-      setScreenStream(stream);
       setHasScreenPermission(true);
       if (screenVideoRef.current) {
         screenVideoRef.current.srcObject = stream;
       }
 
-      // If user stops screen share manually → terminate
       stream.getVideoTracks()[0].addEventListener('ended', () => {
         if (!isTerminatedRef.current) {
           handleViolation('Screen sharing was stopped during the interview.');
@@ -124,12 +88,11 @@ const McqInterview = () => {
     }
   };
 
-  // Attach camera video ref when stream arrives
   useEffect(() => {
-    if (cameraStream && cameraVideoRef.current) {
-      cameraVideoRef.current.srcObject = cameraStream;
+    if (cameraStreamRef.current && cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = cameraStreamRef.current;
     }
-  }, [cameraStream]);
+  }, [hasCameraPermission]);
 
   // Auto-advance to 'ready' when both permissions are granted
   useEffect(() => {
@@ -138,9 +101,6 @@ const McqInterview = () => {
     }
   }, [hasCameraPermission, hasScreenPermission, proctoringPhase]);
 
-  // ─────────────────────────────────────────────────────────────
-  // PROCTORING: Tab / Window Switch Detection
-  // ─────────────────────────────────────────────────────────────
   const handleViolation = useCallback(async (reason) => {
     if (isTerminatedRef.current) return;
     isTerminatedRef.current = true;
@@ -148,7 +108,6 @@ const McqInterview = () => {
     setViolationReason(reason);
     setProctoringPhase('terminated');
 
-    // Stop all media
     cameraStreamRef.current?.getTracks().forEach(t => t.stop());
     screenStreamRef.current?.getTracks().forEach(t => t.stop());
 
@@ -167,10 +126,7 @@ const McqInterview = () => {
       if (document.hidden && !isTerminatedRef.current) {
         const newCount = tabSwitchWarningsRef.current + 1;
         tabSwitchWarningsRef.current = newCount;
-        setTabSwitchWarnings(newCount);
-
         if (newCount >= 1) {
-          // Zero-tolerance: first switch terminates
           handleViolation('Candidate switched away from the interview tab.');
         }
       }
@@ -180,8 +136,6 @@ const McqInterview = () => {
       if (!isTerminatedRef.current) {
         const newCount = tabSwitchWarningsRef.current + 1;
         tabSwitchWarningsRef.current = newCount;
-        setTabSwitchWarnings(newCount);
-
         if (newCount >= 2) {
           handleViolation('Candidate switched to another window during the interview.');
         }
@@ -196,6 +150,145 @@ const McqInterview = () => {
       window.removeEventListener('blur', handleWindowBlur);
     };
   }, [proctoringPhase, handleViolation]);
+
+  // ─────────────────────────────────────────────────────────────
+  // PROCTORING: Face Detection + Brightness/Phone Flash Detection
+  // Uses canvas pixel analysis — no external library needed
+  // ─────────────────────────────────────────────────────────────
+  const showProctoringAlert = useCallback((type, message) => {
+    setProctoringAlert({ type, message });
+    if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+    alertTimeoutRef.current = setTimeout(() => setProctoringAlert(null), 4000);
+  }, []);
+
+  useEffect(() => {
+    if (proctoringPhase !== 'active') return;
+    if (!cameraVideoRef.current || !cameraStreamRef.current) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 160;
+    canvas.height = 120;
+
+    const analyzeFrame = () => {
+      if (isTerminatedRef.current) return;
+      const video = cameraVideoRef.current;
+      if (!video || video.readyState < 2) return;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = frame.data;
+
+      // ── 1. Brightness calculation ──────────────────────────────
+      let totalBrightness = 0;
+      let pixelCount = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        totalBrightness += (0.299 * r + 0.587 * g + 0.114 * b);
+        pixelCount++;
+      }
+      const avgBrightness = totalBrightness / pixelCount;
+
+      // Phone torch/flash → sudden brightness spike > 60 units
+      if (prevBrightnessRef.current !== null) {
+        const delta = avgBrightness - prevBrightnessRef.current;
+        if (delta > 60 && avgBrightness > 180) {
+          // Severe flash → terminate immediately
+          handleViolation('Phone flash/torch detected near the camera. Possible mobile device usage detected.');
+          return;
+        } else if (delta > 35 && avgBrightness > 150) {
+          // Moderate brightness spike → warning
+          showProctoringAlert('warning', '⚠️ Sudden bright light detected! Phone/torch near camera is not allowed.');
+        }
+      }
+      prevBrightnessRef.current = avgBrightness;
+
+      // ── 2. Skin-tone pixel face detection (heuristic) ──────────
+      // Counts flesh-tone pixels in center region of frame (where face should be)
+      const centerX = Math.floor(canvas.width * 0.2);
+      const centerY = Math.floor(canvas.height * 0.1);
+      const regionW = Math.floor(canvas.width * 0.6);
+      const regionH = Math.floor(canvas.height * 0.8);
+
+      let skinPixels = 0;
+      let regionPixels = 0;
+
+      for (let y = centerY; y < centerY + regionH; y++) {
+        for (let x = centerX; x < centerX + regionW; x++) {
+          const idx = (y * canvas.width + x) * 4;
+          const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+          regionPixels++;
+          // Skin tone heuristic (works for many skin tones in reasonable lighting)
+          if (
+            r > 60 && g > 40 && b > 20 &&
+            r > g && r > b &&
+            (r - g) > 10 &&
+            r < 240 && g < 210 && b < 190
+          ) {
+            skinPixels++;
+          }
+        }
+      }
+
+      const skinRatio = skinPixels / regionPixels;
+
+      // ── 3. No face detected ────────────────────────────────────
+      if (skinRatio < 0.04) {
+        // Very little skin tone → face not visible
+        noFaceWarningsRef.current += 1;
+        if (noFaceWarningsRef.current === 3) {
+          showProctoringAlert('danger', '⚠️ WARNING: Your face is not visible! Look at the camera.');
+        } else if (noFaceWarningsRef.current >= 6) {
+          handleViolation('Candidate\'s face was not visible for an extended period. Possible absence or phone usage.');
+          return;
+        }
+      } else {
+        // Face detected — reset no-face counter
+        if (noFaceWarningsRef.current > 0) noFaceWarningsRef.current = 0;
+      }
+
+      // ── 4. Multiple faces (extra skin in frame edges) ─────────
+      // Check if significant skin tone exists in the outer 20% of frame edges
+      // suggesting another person leaning in
+      let edgeSkinPixels = 0;
+      let edgeTotalPixels = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const pixelIndex = i / 4;
+        const px = pixelIndex % canvas.width;
+        const py = Math.floor(pixelIndex / canvas.width);
+        const isEdge = px < canvas.width * 0.15 || px > canvas.width * 0.85 ||
+                       py < canvas.height * 0.1 || py > canvas.height * 0.9;
+        if (!isEdge) continue;
+        edgeTotalPixels++;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (r > 60 && g > 40 && b > 20 && r > g && r > b && (r - g) > 10 && r < 240) {
+          edgeSkinPixels++;
+        }
+      }
+
+      const edgeSkinRatio = edgeSkinPixels / edgeTotalPixels;
+      // If center has face AND edges also have significant skin → another person
+      if (skinRatio > 0.08 && edgeSkinRatio > 0.20) {
+        faceWarningsRef.current += 1;
+        if (faceWarningsRef.current === 2) {
+          showProctoringAlert('danger', '🚨 Multiple persons detected! Only the candidate should be in frame.');
+        } else if (faceWarningsRef.current >= 4) {
+          handleViolation('Multiple persons detected in camera frame during the interview.');
+          return;
+        }
+      } else {
+        if (faceWarningsRef.current > 0) faceWarningsRef.current = Math.max(0, faceWarningsRef.current - 1);
+      }
+    };
+
+    // Run detection every 2.5 seconds
+    detectionIntervalRef.current = setInterval(analyzeFrame, 2500);
+
+    return () => {
+      if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
+      if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
+    };
+  }, [proctoringPhase, handleViolation, showProctoringAlert]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -352,8 +445,32 @@ const McqInterview = () => {
         flexDirection: 'column',
         fontFamily: 'var(--font-sans)'
       }}>
+        <style>{`
+          @media (max-width: 768px) {
+            .proctor-setup-header {
+              height: auto !important;
+              padding: 0.65rem 1rem !important;
+              flex-wrap: wrap !important;
+              gap: 0.5rem !important;
+            }
+            .proctor-setup-main {
+              padding: 1rem 0.75rem !important;
+            }
+            .proctor-step-card {
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              padding: 1.15rem 1rem !important;
+              gap: 0.85rem !important;
+            }
+            .proctor-preview-box {
+              width: 100% !important;
+              max-width: 240px !important;
+              height: 120px !important;
+            }
+          }
+        `}</style>
         {/* Professional top header bar */}
-        <div style={{
+        <div className="proctor-setup-header" style={{
           background: '#fff',
           borderBottom: '1px solid #e2e8f0',
           padding: '0 2rem',
@@ -363,17 +480,20 @@ const McqInterview = () => {
           justifyContent: 'space-between',
           boxShadow: '0 1px 4px rgba(0,0,0,0.06)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ShieldAlert size={18} color="#fff" />
-            </div>
-            <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b' }}>InterviewPro</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <img
+              src="/logo.png"
+              alt="Med Manor Organics"
+              style={{ height: '38px', maxWidth: '150px', objectFit: 'contain' }}
+            />
+            <div style={{ height: '20px', width: '1px', background: '#e2e8f0' }}></div>
+            <span style={{ fontWeight: 800, fontSize: '1rem', color: '#1e293b' }}>InterviewPro</span>
           </div>
           <span style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             background: '#fef2f2', border: '1px solid #fecaca',
-            color: '#dc2626', padding: '0.3rem 0.85rem',
-            borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700
+            color: '#dc2626', padding: '0.25rem 0.75rem',
+            borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700
           }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#dc2626', display: 'inline-block', animation: 'blink 1.2s infinite' }} />
             LIVE MONITORING
@@ -381,24 +501,24 @@ const McqInterview = () => {
         </div>
 
         {/* Main content */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+        <div className="proctor-setup-main" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem 1rem' }}>
           <div style={{ maxWidth: '720px', width: '100%' }}>
 
             {/* Title block */}
-            <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+            <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
               <div style={{
-                width: '56px', height: '56px', borderRadius: '14px',
+                width: '52px', height: '52px', borderRadius: '14px',
                 background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 1rem',
+                margin: '0 auto 0.75rem',
                 boxShadow: '0 4px 14px rgba(99,102,241,0.35)'
               }}>
-                <ShieldAlert size={28} color="#fff" />
+                <ShieldAlert size={26} color="#fff" />
               </div>
-              <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.4rem' }}>
-                System & Permission Check
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.35rem' }}>
+                System &amp; Permission Check
               </h1>
-              <p style={{ color: '#64748b', fontSize: '0.92rem', maxWidth: '480px', margin: '0 auto' }}>
+              <p style={{ color: '#64748b', fontSize: '0.875rem', maxWidth: '480px', margin: '0 auto' }}>
                 Before starting the interview, please grant access to your camera, microphone, and screen. All three are required.
               </p>
             </div>
@@ -409,14 +529,14 @@ const McqInterview = () => {
               border: '1px solid #fed7aa',
               borderLeft: '4px solid #f97316',
               borderRadius: '10px',
-              padding: '0.9rem 1.25rem',
-              marginBottom: '1.5rem',
+              padding: '0.85rem 1.15rem',
+              marginBottom: '1.25rem',
               display: 'flex',
               gap: '0.75rem',
               alignItems: 'flex-start'
             }}>
               <AlertTriangle size={18} color="#f97316" style={{ flexShrink: 0, marginTop: '1px' }} />
-              <div style={{ fontSize: '0.85rem', color: '#92400e', lineHeight: 1.55 }}>
+              <div style={{ fontSize: '0.825rem', color: '#92400e', lineHeight: 1.55 }}>
                 <strong style={{ color: '#c2410c' }}>Zero-Tolerance Policy:</strong>{' '}
                 Switching tabs, opening other windows, or stopping your screen share will{' '}
                 <strong>immediately terminate</strong> your interview. Your partial score will be recorded.
@@ -427,8 +547,8 @@ const McqInterview = () => {
             {mediaError && (
               <div style={{
                 background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '4px solid #ef4444',
-                borderRadius: '10px', padding: '0.9rem 1.25rem', marginBottom: '1.5rem',
-                fontSize: '0.85rem', color: '#991b1b',
+                borderRadius: '10px', padding: '0.85rem 1.15rem', marginBottom: '1.25rem',
+                fontSize: '0.825rem', color: '#991b1b',
                 display: 'flex', gap: '0.6rem', alignItems: 'flex-start'
               }}>
                 <AlertTriangle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: '1px' }} />
@@ -440,7 +560,7 @@ const McqInterview = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
 
               {/* Step 1: Camera */}
-              <div style={{
+              <div className="proctor-step-card" style={{
                 background: '#fff',
                 border: `1.5px solid ${hasCameraPermission ? '#86efac' : '#e2e8f0'}`,
                 borderRadius: '14px',
@@ -464,7 +584,7 @@ const McqInterview = () => {
                 </div>
 
                 {/* Camera preview box */}
-                <div style={{
+                <div className="proctor-preview-box" style={{
                   width: '100px', height: '75px', background: '#0f172a',
                   borderRadius: '8px', overflow: 'hidden', flexShrink: 0,
                   position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -486,8 +606,8 @@ const McqInterview = () => {
                 </div>
 
                 {/* Info */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem' }}>
+                <div style={{ flex: 1, width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>Camera &amp; Microphone</span>
                     {hasCameraPermission && (
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '0.15rem 0.55rem', borderRadius: '999px', border: '1px solid #bbf7d0' }}>✓ ACTIVE</span>
@@ -515,7 +635,7 @@ const McqInterview = () => {
               </div>
 
               {/* Step 2: Screen Share */}
-              <div style={{
+              <div className="proctor-step-card" style={{
                 background: '#fff',
                 border: `1.5px solid ${hasScreenPermission ? '#86efac' : '#e2e8f0'}`,
                 borderRadius: '14px',
@@ -537,7 +657,7 @@ const McqInterview = () => {
                   {hasScreenPermission ? '✓' : '2'}
                 </div>
 
-                <div style={{
+                <div className="proctor-preview-box" style={{
                   width: '100px', height: '75px', background: '#0f172a',
                   borderRadius: '8px', overflow: 'hidden', flexShrink: 0,
                   display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -551,8 +671,8 @@ const McqInterview = () => {
                   )}
                 </div>
 
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem' }}>
+                <div style={{ flex: 1, width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1e293b' }}>Screen Recording</span>
                     {hasScreenPermission && (
                       <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '0.15rem 0.55rem', borderRadius: '999px', border: '1px solid #bbf7d0' }}>✓ SHARING</span>
@@ -593,7 +713,7 @@ const McqInterview = () => {
               onClick={() => setProctoringPhase('active')}
               disabled={!allReady}
               style={{
-                width: '100%', padding: '1rem 1.5rem',
+                width: '100%', padding: '0.9rem 1.5rem',
                 background: allReady
                   ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
                   : '#f1f5f9',
@@ -648,10 +768,13 @@ const McqInterview = () => {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           boxShadow: '0 1px 4px rgba(0,0,0,0.06)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ShieldAlert size={18} color="#fff" />
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img
+              src="/logo.png"
+              alt="Med Manor Organics"
+              style={{ height: '44px', maxWidth: '180px', objectFit: 'contain' }}
+            />
+            <div style={{ height: '22px', width: '1px', background: '#fecaca' }}></div>
             <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e293b' }}>InterviewPro</span>
           </div>
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ef4444', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.3rem 0.85rem', borderRadius: '999px' }}>
@@ -812,14 +935,82 @@ const McqInterview = () => {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-main)' }}>
+      <style>{`
+        @media (max-width: 960px) {
+          .mcq-interview-layout {
+            flex-direction: column !important;
+            padding: 1rem !important;
+            gap: 1rem !important;
+          }
+          .mcq-interview-sidebar {
+            width: 100% !important;
+          }
+        }
+        @media (max-width: 768px) {
+          .mcq-interview-header {
+            height: auto !important;
+            min-height: 60px !important;
+            padding: 0.65rem 1rem !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0.65rem !important;
+          }
+          .mcq-header-left, .mcq-header-right {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+            flex-wrap: wrap !important;
+            gap: 0.5rem !important;
+          }
+          .mcq-question-card {
+            padding: 1.25rem 1rem !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .mcq-question-text {
+            font-size: 1.05rem !important;
+          }
+          .mcq-brand-logo {
+            height: 32px !important;
+            max-width: 120px !important;
+          }
+        }
+      `}</style>
+      {/* ── Proctoring Alert Banner ── */}
+      {proctoringAlert && (
+        <div style={{
+          position: 'fixed', top: '70px', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999,
+          background: proctoringAlert.type === 'danger' ? '#fef2f2' : '#fffbeb',
+          border: `2px solid ${proctoringAlert.type === 'danger' ? '#fca5a5' : '#fcd34d'}`,
+          borderRadius: '12px',
+          padding: '0.75rem 1.5rem',
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
+          fontSize: '0.9rem', fontWeight: 700,
+          color: proctoringAlert.type === 'danger' ? '#991b1b' : '#92400e',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          maxWidth: '90vw',
+          textAlign: 'center'
+        }}>
+          {proctoringAlert.message}
+        </div>
+      )}
       {/* ── Top Navbar ── */}
-      <header className="top-navbar" style={{ position: 'sticky', top: 0, zIndex: 50, borderBottom: '1px solid var(--border-light)', backgroundColor: '#ffffff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+      <header className="top-navbar mcq-interview-header" style={{ position: 'sticky', top: 0, zIndex: 50, borderBottom: '1px solid var(--border-light)', backgroundColor: '#ffffff' }}>
+        <div className="mcq-header-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <img
+            src="/logo.png"
+            alt="Med Manor Organics"
+            className="mcq-brand-logo"
+            style={{ height: '40px', maxWidth: '160px', objectFit: 'contain' }}
+          />
+          <div style={{ height: '22px', width: '1px', background: 'var(--border-light)' }}></div>
           <div>
-            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.04em' }}>
+            <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.04em' }}>
               Round 1 Interview
             </div>
-            <h2 style={{ fontSize: '1.15rem', color: 'var(--text-main)', margin: 0, fontWeight: 700 }}>
+            <h2 style={{ fontSize: '1.05rem', color: 'var(--text-main)', margin: 0, fontWeight: 700 }}>
               {assessment?.title}
             </h2>
           </div>
@@ -834,9 +1025,9 @@ const McqInterview = () => {
             background: '#fef2f2',
             border: '1px solid #fecaca',
             color: '#dc2626',
-            padding: '0.25rem 0.75rem',
+            padding: '0.2rem 0.65rem',
             borderRadius: '999px',
-            fontSize: '0.775rem',
+            fontSize: '0.72rem',
             fontWeight: 700
           }}>
             <span style={{
@@ -849,14 +1040,15 @@ const McqInterview = () => {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+        <div className="mcq-header-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
           {/* Camera miniature in header */}
           <div style={{
-            width: '60px', height: '45px',
+            width: '56px', height: '42px',
             borderRadius: '6px',
             overflow: 'hidden',
-            border: '2px solid #10b981',
-            flexShrink: 0
+            border: `2px solid ${proctoringAlert?.type === 'danger' ? '#ef4444' : '#10b981'}`,
+            flexShrink: 0,
+            transition: 'border-color 0.3s ease'
           }}>
             <video
               ref={cameraVideoRef}
@@ -877,17 +1069,17 @@ const McqInterview = () => {
 
           <button
             onClick={() => setShowConfirmModal(true)}
-            className="btn btn-primary"
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}
+            className="btn btn-primary btn-sm"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, padding: '0.5rem 0.9rem' }}
           >
-            <Send size={16} />
+            <Send size={15} />
             <span>Submit Round 1</span>
           </button>
         </div>
       </header>
 
       {/* ── Main Layout ── */}
-      <div style={{ flex: 1, display: 'flex', maxWidth: '1440px', width: '100%', margin: '0 auto', padding: '1.5rem', gap: '1.5rem' }}>
+      <div className="mcq-interview-layout" style={{ flex: 1, display: 'flex', maxWidth: '1440px', width: '100%', margin: '0 auto', padding: '1.5rem', gap: '1.5rem' }}>
 
         {/* Left: Question + Answer */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -897,7 +1089,7 @@ const McqInterview = () => {
             borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)',
             marginBottom: '1.25rem', boxShadow: 'var(--shadow-sm)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', fontSize: '0.85rem', flexWrap: 'wrap', gap: '0.35rem' }}>
               <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>
                 Progress: {answeredCount} of {totalQuestions} answered ({progressPercent}%)
               </span>
@@ -916,23 +1108,23 @@ const McqInterview = () => {
 
           {/* Question Card */}
           {currentQuestion && (
-            <div style={{
+            <div className="mcq-question-card" style={{
               background: 'var(--bg-card)', padding: '2rem',
               borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-light)',
               boxShadow: 'var(--shadow-md)', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
             }}>
               <div>
                 {/* Question header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-light)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-light)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <span style={{
                       backgroundColor: 'var(--primary-light)', color: 'var(--primary)',
                       padding: '0.35rem 0.85rem', borderRadius: 'var(--radius-md)',
-                      fontWeight: 700, fontSize: '0.9rem'
+                      fontWeight: 700, fontSize: '0.85rem'
                     }}>
                       Question {currentIndex + 1} of {totalQuestions}
                     </span>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    <span style={{ fontSize: '0.825rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                       Worth {currentQuestion.marks} Marks
                     </span>
                   </div>
@@ -947,7 +1139,7 @@ const McqInterview = () => {
                 </div>
 
                 {/* Question text */}
-                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.5, marginBottom: '1.5rem' }}>
+                <div className="mcq-question-text" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.5, marginBottom: '1.5rem' }}>
                   {currentQuestion.question_text}
                 </div>
 
@@ -980,7 +1172,7 @@ const McqInterview = () => {
               </div>
 
               {/* Navigation */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1.25rem', borderTop: '1px solid var(--border-light)', flexWrap: 'wrap', gap: '1rem' }}>
+              <div className="mcq-bottom-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1.25rem', borderTop: '1px solid var(--border-light)', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
                   {currentAnswerText.trim().length > 0 && (
                     <button onClick={handleClearAnswer} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)' }}>
@@ -989,7 +1181,7 @@ const McqInterview = () => {
                     </button>
                   )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
                   <button onClick={handlePrev} disabled={currentIndex === 0} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <ArrowLeft size={16} />
                     <span>Previous</span>
@@ -1012,7 +1204,7 @@ const McqInterview = () => {
         </div>
 
         {/* Right Sidebar */}
-        <aside style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <aside className="mcq-interview-sidebar" style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {/* Question palette */}
           <div style={{
             background: 'var(--bg-card)', padding: '1.5rem',
@@ -1073,7 +1265,7 @@ const McqInterview = () => {
               autoPlay
               muted
               playsInline
-              ref={el => { if (el && cameraStream) el.srcObject = cameraStream; }}
+              ref={el => { if (el && cameraStreamRef.current) el.srcObject = cameraStreamRef.current; }}
               style={{ width: '100%', borderRadius: '8px', objectFit: 'cover', aspectRatio: '4/3', background: '#000', transform: 'scaleX(-1)' }}
             />
           </div>

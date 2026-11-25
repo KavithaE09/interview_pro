@@ -3,17 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import {
-  Award,
-  Search,
-  Filter,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  ArrowRight,
-  Layers,
-  FileSpreadsheet,
-  AlertCircle
+import {Search,CheckCircle2,XCircle, ArrowRight,AlertCircle
 } from 'lucide-react';
 
 const ResultsManagement = () => {
@@ -92,9 +82,7 @@ const ResultsManagement = () => {
             <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
               Results & Scores Management
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.925rem', marginTop: '0.25rem' }}>
-              Complete audit trail of candidate MCQ interview attempts, correct/incorrect answer counts, marks, and pass/fail qualifications.
-            </p>
+           
           </div>
 
           {error && (

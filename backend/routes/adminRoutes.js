@@ -12,12 +12,13 @@ const {
   updateAssessment,
   deleteAssessment,
   togglePublishAssessment,
-  addMcqQuestion,
-  updateMcqQuestion,
+  addQuestion,
+  updateQuestion,
   deleteQuestion,
   getAllCandidates,
   getCandidateDetailWithHistory,
   assignAssessmentToCandidates,
+  assignCategoryToCandidates,
   getAllResults
 } = require('../controllers/adminController');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
@@ -42,15 +43,16 @@ router.put('/assessments/:id', updateAssessment);
 router.delete('/assessments/:id', deleteAssessment);
 router.patch('/assessments/:id/toggle-publish', togglePublishAssessment);
 
-// MCQ Questions
-router.post('/questions/mcq', addMcqQuestion);
-router.put('/questions/mcq/:id', updateMcqQuestion);
+// Question CRUD
+router.post('/questions', addQuestion);
+router.put('/questions/:id', updateQuestion);
 router.delete('/questions/:id', deleteQuestion);
 
 // Candidate management
 router.get('/candidates', getAllCandidates);
 router.get('/candidates/:candidateId', getCandidateDetailWithHistory);
 router.post('/assign', assignAssessmentToCandidates);
+router.post('/assign-category', assignCategoryToCandidates);
 
 // Results & Analytics
 router.get('/results', getAllResults);

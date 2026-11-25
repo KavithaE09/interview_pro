@@ -6,10 +6,9 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
   const [secondsLeft, setSecondsLeft] = useState(initialRemainingSeconds);
   const [hasWarnedFiveMin, setHasWarnedFiveMin] = useState(false);
   const [hasWarnedOneMin, setHasWarnedOneMin] = useState(false);
-  const [showWarningBanner, setShowWarningBanner] = useState(null); // 'five_min' | 'one_min' | null
+  const [showWarningBanner, setShowWarningBanner] = useState(null); 
   const timerRef = useRef(null);
  
-  // Synchronize with server time every 30 seconds to prevent clock drift/tampering
   useEffect(() => {
     setSecondsLeft(initialRemainingSeconds);
 
@@ -25,10 +24,7 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
           }
         }
       } catch (err) {
-        c
-        
-        
-        onsole.error('Timer sync error:', err);
+        console.error('Timer sync error:', err);
       }
     };
 
@@ -36,7 +32,6 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
     return () => clearInterval(syncInterval);
   }, [attemptId, initialRemainingSeconds, onExpire]);
 
-  // Main 1-second countdown tick
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setSecondsLeft((prev) => {
@@ -48,14 +43,12 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
 
         const next = prev - 1;
 
-        // 5-minute warning (300 seconds)
         if (next <= 300 && next > 298 && !hasWarnedFiveMin) {
           setHasWarnedFiveMin(true);
           setShowWarningBanner('five_min');
           if (onWarningFiveMin) onWarningFiveMin();
         }
 
-        // 1-minute critical warning (60 seconds)
         if (next <= 60 && next > 58 && !hasWarnedOneMin) {
           setHasWarnedOneMin(true);
           setShowWarningBanner('one_min');
@@ -69,7 +62,6 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
     return () => clearInterval(timerRef.current);
   }, [hasWarnedFiveMin, hasWarnedOneMin, onExpire, onWarningFiveMin, onWarningOneMin]);
 
-  // Format HH:MM:SS
   const formatTime = (totalSeconds) => {
     const s = Math.max(0, Math.floor(totalSeconds));
     const hours = Math.floor(s / 3600);
@@ -103,12 +95,12 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
         <span>{formatTime(secondsLeft)}</span>
       </div>
 
-      {/* Floating 5-minute warning banner */}
       {showWarningBanner === 'five_min' && (
         <div style={{
           position: 'fixed',
           top: '80px',
-          right: '24px',
+          right: '16px',
+          maxWidth: 'calc(100vw - 32px)',
           background: '#fffbeb',
           border: '1.5px solid #fde68a',
           color: '#92400e',
@@ -120,7 +112,7 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
           gap: '0.75rem',
           zIndex: 99
         }}>
-          <AlertTriangle size={24} color="#f59e0b" />
+          <AlertTriangle size={24} color="#f59e0b" style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 700 }}>5 Minutes Remaining!</div>
             <div style={{ fontSize: '0.85rem' }}>Please review your answers and prepare to submit.</div>
@@ -134,12 +126,12 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
         </div>
       )}
 
-      {/* Floating 1-minute critical warning banner */}
       {showWarningBanner === 'one_min' && (
         <div style={{
           position: 'fixed',
           top: '80px',
-          right: '24px',
+          right: '16px',
+          maxWidth: 'calc(100vw - 32px)',
           background: '#fef2f2',
           border: '1.5px solid #fecaca',
           color: '#991b1b',
@@ -152,7 +144,7 @@ const CountdownTimer = ({ attemptId, initialRemainingSeconds = 0, onExpire, onWa
           zIndex: 99,
           animation: 'pulse-red 1s infinite'
         }}>
-          <AlertOctagon size={26} color="#ef4444" />
+          <AlertOctagon size={26} color="#ef4444" style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 800 }}>1 Minute Remaining – Urgency!</div>
             <div style={{ fontSize: '0.85rem' }}>The assessment will automatically submit when the timer reaches zero.</div>

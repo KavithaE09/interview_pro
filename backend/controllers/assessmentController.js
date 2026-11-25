@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const jwt = require('jsonwebtoken');
+const { validateEmail, validatePhone } = require('../utils/validators');
 
 // Public: Get all published assessments for direct candidate browsing
 const getPublicAssessments = async (req, res) => {
@@ -64,13 +65,23 @@ const startDirectAssessment = async (req, res) => {
     const { assessmentId } = req.params;
     const { name, email, phone } = req.body;
 
-    if (!name || !name.trim() || !email || !email.trim() || !phone || !phone.trim()) {
-      return res.status(400).json({ success: false, message: 'Candidate Name, Email, and Phone number are required.' });
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Candidate name is required.' });
     }
 
-    const emailTrimmed = email.trim().toLowerCase();
+    const emailV = validateEmail(email);
+    if (!emailV.isValid) {
+      return res.status(400).json({ success: false, message: emailV.message });
+    }
+
+    const phoneV = validatePhone(phone, false);
+    if (!phoneV.isValid) {
+      return res.status(400).json({ success: false, message: phoneV.message });
+    }
+
+    const emailTrimmed = emailV.email;
     const nameTrimmed = name.trim();
-    const phoneTrimmed = phone.trim();
+    const phoneTrimmed = phoneV.phone; // may be null
 
     const [assessments] = await pool.query(`
       SELECT asm.id, asm.title, asm.duration_minutes, asm.total_marks, asm.passing_marks, c.category_name

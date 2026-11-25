@@ -3,17 +3,7 @@ import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import Modal from '../components/Modal';
-import {
-  FolderKanban,
-  PlusCircle,
-  Edit2,
-  Trash2,
-  Layers,
-  FileCheck,
-  AlertCircle,
-  CheckCircle2,
-  Save
-} from 'lucide-react';
+import {FolderKanban,PlusCircle,Edit2,Trash2,Layers,FileCheck,AlertCircle,CheckCircle2,Save} from 'lucide-react';
 
 const CategoryManagement = () => {
   const [categories, setCategories] = useState([]);
@@ -126,9 +116,6 @@ const CategoryManagement = () => {
               <h1 style={{ fontSize: '1.85rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                 Category Management
               </h1>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.925rem', marginTop: '0.25rem' }}>
-                Organize MCQ interview rounds into technical disciplines (e.g., Digital Marketing, Google Analytics, Microsoft Excel).
-              </p>
             </div>
 
             <button

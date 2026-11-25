@@ -23,15 +23,24 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
-      // Only redirect to admin login if user is attempting an admin panel route (/admin/*)
-      // Candidate routes (/results, /take-test, /interview) must never be redirected to admin login!
-      if (window.location.pathname.startsWith('/admin') && !window.location.pathname.includes('/login')) {
+    const status = error?.response?.status;
+    const path = window.location.pathname;
+
+    if (status === 401) {
+      // Admin panel → redirect to admin login
+      if (path.startsWith('/admin') && !path.includes('/login')) {
         localStorage.removeItem('interviewpro_token');
         localStorage.removeItem('interviewpro_user');
         window.location.href = '/admin/login';
       }
+      // Candidate pages → redirect to candidate login
+      else if (path.startsWith('/candidate') && !path.includes('/login')) {
+        localStorage.removeItem('interviewpro_token');
+        localStorage.removeItem('interviewpro_user');
+        window.location.href = '/candidate/login';
+      }
     }
+    // 500/network errors: just reject, don't force logout
     return Promise.reject(error);
   }
 );
