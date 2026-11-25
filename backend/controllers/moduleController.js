@@ -288,11 +288,12 @@ const getCandidateDashboardData = async (req, res) => {
       FROM assessment_assignments aa
       JOIN assessments a ON aa.assessment_id = a.id
       LEFT JOIN categories c ON a.category_id = c.id
-      LEFT JOIN assessment_attempts att ON att.id = (
-        SELECT id FROM assessment_attempts 
-        WHERE assignment_id = aa.id 
-        ORDER BY created_at DESC LIMIT 1
-      )
+      LEFT JOIN (
+        SELECT assignment_id, MAX(id) AS max_id 
+        FROM assessment_attempts 
+        GROUP BY assignment_id
+      ) latest_att ON latest_att.assignment_id = aa.id
+      LEFT JOIN assessment_attempts att ON att.id = latest_att.max_id
       WHERE aa.candidate_id = ? AND a.status = 'published'
       ORDER BY aa.assigned_at DESC, a.id DESC
     `, [candidateId]);
