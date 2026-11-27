@@ -322,14 +322,14 @@ const candidateLogin = async (req, res) => {
       candidateUser.category_id = selectedCategory.id;
     } else {
       const [insertResult] = await pool.query(
-        'INSERT INTO users (name, email, phone, role, category_id) VALUES (?, ?, ?, "candidate", ?)',
-        [nameTrimmed, emailTrimmed, validatedPhone, selectedCategory.id]
+        'INSERT INTO users (name, email, phone, password_hash, role, category_id) VALUES (?, ?, ?, "CANDIDATE_QUICK_LOGIN", "candidate", ?)',
+        [nameTrimmed, emailTrimmed, validatedPhone || '', selectedCategory.id]
       );
       candidateUser = {
         id: insertResult.insertId,
         name: nameTrimmed,
         email: emailTrimmed,
-        phone: validatedPhone,
+        phone: validatedPhone || '',
         role: 'candidate',
         category_id: selectedCategory.id
       };
