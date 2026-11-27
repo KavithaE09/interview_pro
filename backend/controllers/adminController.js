@@ -181,6 +181,9 @@ const getAssessmentDetailsWithQuestions = async (req, res) => {
         ORDER BY id ASC
       `, [q.id]);
       q.options = options;
+      if (options.length === 0) {
+        q.question_type = 'text';
+      }
     }
 
     assessment.questions = questions;

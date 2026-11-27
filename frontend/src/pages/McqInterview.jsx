@@ -38,6 +38,7 @@ const McqInterview = () => {
   const alertTimeoutRef = useRef(null);
 
   const cameraVideoRef = useRef(null);
+  const sidebarCameraVideoRef = useRef(null);
   const screenVideoRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
@@ -89,10 +90,15 @@ const McqInterview = () => {
   };
 
   useEffect(() => {
-    if (cameraStreamRef.current && cameraVideoRef.current) {
-      cameraVideoRef.current.srcObject = cameraStreamRef.current;
+    const stream = cameraStreamRef.current;
+    if (!stream) return;
+    if (cameraVideoRef.current && cameraVideoRef.current.srcObject !== stream) {
+      cameraVideoRef.current.srcObject = stream;
     }
-  }, [hasCameraPermission]);
+    if (sidebarCameraVideoRef.current && sidebarCameraVideoRef.current.srcObject !== stream) {
+      sidebarCameraVideoRef.current.srcObject = stream;
+    }
+  }, [hasCameraPermission, proctoringPhase, loading]);
 
   // Auto-advance to 'ready' when both permissions are granted
   useEffect(() => {
@@ -162,8 +168,9 @@ const McqInterview = () => {
   }, []);
 
   useEffect(() => {
-    if (proctoringPhase !== 'active') return;
-    if (!cameraVideoRef.current || !cameraStreamRef.current) return;
+    if (proctoringPhase !== 'active' || loading) return;
+    const activeVideoEl = sidebarCameraVideoRef.current || cameraVideoRef.current;
+    if (!activeVideoEl || !cameraStreamRef.current) return;
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -172,7 +179,7 @@ const McqInterview = () => {
 
     const analyzeFrame = () => {
       if (isTerminatedRef.current) return;
-      const video = cameraVideoRef.current;
+      const video = sidebarCameraVideoRef.current || cameraVideoRef.current;
       if (!video || video.readyState < 2) return;
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -288,7 +295,7 @@ const McqInterview = () => {
       if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
       if (alertTimeoutRef.current) clearTimeout(alertTimeoutRef.current);
     };
-  }, [proctoringPhase, handleViolation, showProctoringAlert]);
+  }, [proctoringPhase, loading, handleViolation, showProctoringAlert]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -376,7 +383,7 @@ const McqInterview = () => {
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
     const currentAns = answers[currentQ.id] || { answerText: '', selectedOptionId: null, markedForReview: false };
-    const isMcq = currentQ.question_type === 'mcq' || (currentQ.options && currentQ.options.length > 0);
+    const isMcq = Boolean(currentQ.options && currentQ.options.length > 0);
     if (isMcq) {
       setAnswers({ ...answers, [currentQ.id]: { ...currentAns, selectedOptionId: null } });
       persistAnswer(currentQ.id, currentAns.answerText, currentAns.markedForReview, null);
@@ -941,7 +948,7 @@ const McqInterview = () => {
   let markedCount = 0;
   questions.forEach(q => {
     const a = answers[q.id];
-    const isMcq = q.question_type === 'mcq' || (q.options && q.options.length > 0);
+    const isMcq = Boolean(q.options && q.options.length > 0);
     if (isMcq) {
       if (a && a.selectedOptionId) answeredCount++;
     } else {
@@ -956,7 +963,7 @@ const McqInterview = () => {
   const currentSelectedOptionId = currentAnswer ? (currentAnswer.selectedOptionId || null) : null;
   const isMarkedForReview = Boolean(currentAnswer && currentAnswer.markedForReview);
   const wordCount = currentAnswerText ? currentAnswerText.trim().split(/\s+/).filter(Boolean).length : 0;
-  const isMcqQuestion = currentQuestion && (currentQuestion.question_type === 'mcq' || (currentQuestion.options && currentQuestion.options.length > 0));
+  const isMcqQuestion = Boolean(currentQuestion && currentQuestion.options && currentQuestion.options.length > 0);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-main)' }}>
@@ -1309,7 +1316,7 @@ const McqInterview = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.6rem' }}>
               {questions.map((q, idx) => {
                 const ans = answers[q.id];
-                const qIsMcq = q.question_type === 'mcq' || (q.options && q.options.length > 0);
+                const qIsMcq = Boolean(q.options && q.options.length > 0);
                 const isAnswered = qIsMcq
                   ? (ans && ans.selectedOptionId)
                   : (ans && ans.answerText && ans.answerText.trim().length > 0);
@@ -1344,11 +1351,11 @@ const McqInterview = () => {
               Camera Live – You Are Being Recorded
             </div>
             <video
+              ref={sidebarCameraVideoRef}
               autoPlay
               muted
               playsInline
-              ref={el => { if (el && cameraStreamRef.current) el.srcObject = cameraStreamRef.current; }}
-              style={{ width: '100%', borderRadius: '8px', objectFit: 'cover', aspectRatio: '4/3', background: '#000', transform: 'scaleX(-1)' }}
+              style={{ width: '100%', borderRadius: '8px', objectFit: 'cover', aspectRatio: '4/3', background: '#0f172a', transform: 'scaleX(-1)' }}
             />
           </div>
         </aside>

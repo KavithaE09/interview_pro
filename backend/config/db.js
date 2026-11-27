@@ -42,6 +42,13 @@ async function ensureSchema(conn) {
         INDEX \`idx_options_question\` (\`question_id\`)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    // Ensure any questions without options are marked as 'text' rather than empty 'mcq'
+    await conn.query(`
+      UPDATE \`questions\` q
+      LEFT JOIN \`question_options\` o ON o.question_id = q.id
+      SET q.question_type = 'text'
+      WHERE o.id IS NULL AND (q.question_type IS NULL OR q.question_type = 'mcq')
+    `);
   } catch (err) {
     console.error('⚠️ Schema auto-migration warning:', err.message);
   }

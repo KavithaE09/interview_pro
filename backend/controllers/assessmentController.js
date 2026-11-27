@@ -490,6 +490,9 @@ const getAssessmentQuestions = async (req, res) => {
           ORDER BY id ASC
         `, [q.id]);
         q.options = opts;
+        if (opts.length === 0) {
+          q.question_type = 'text';
+        }
       } else {
         q.options = [];
       }
@@ -704,14 +707,13 @@ async function calculateAndFinalizeAttempt(attemptId, submissionType = 'submitte
 
   for (const q of questions) {
     const userAns = answerMap[q.question_id];
-    const isMcq = q.question_type === 'mcq';
+    const [options] = q.question_type === 'mcq'
+      ? await pool.query('SELECT id, is_correct FROM question_options WHERE question_id = ?', [q.question_id])
+      : [[]];
+    const isMcq = q.question_type === 'mcq' && options.length > 0;
 
     if (isMcq) {
       // Evaluate MCQ option
-      const [options] = await pool.query(`
-        SELECT id, is_correct FROM question_options WHERE question_id = ?
-      `, [q.question_id]);
-
       const correctOption = options.find(o => o.is_correct === 1 || o.is_correct === true);
       const selectedId = userAns ? userAns.selected_option_id : null;
 
@@ -950,7 +952,7 @@ const getAttemptResult = async (req, res) => {
 
     const questionsReview = questions.map(q => {
       const userAns = answerMap[q.id];
-      const isMcq = q.question_type === 'mcq';
+      const isMcq = q.question_type === 'mcq' && q.options && q.options.length > 0;
       const answerText = userAns ? (userAns.answer_text || '') : '';
       const selectedOptionId = userAns ? (userAns.selected_option_id || null) : null;
       const scoreAwarded = userAns ? Number(userAns.score_awarded || 0) : 0;
@@ -974,7 +976,7 @@ const getAttemptResult = async (req, res) => {
         questionText: q.question_text,
         marks: q.marks,
         questionOrder: q.question_order,
-        questionType: q.question_type || 'text',
+        questionType: isMcq ? 'mcq' : 'text',
         candidateAnswer: answerText,
         selectedOptionId,
         options: attempt.allow_view_answers ? q.options : (q.options || []).map(o => ({ id: o.id, option_text: o.option_text })),

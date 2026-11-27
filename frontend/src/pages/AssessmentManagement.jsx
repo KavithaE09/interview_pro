@@ -159,7 +159,7 @@ const AssessmentManagement = () => {
         kw = q.expected_keywords;
       }
     }
-    const qType = q.question_type || (q.options && q.options.length > 0 ? 'mcq' : 'text');
+    const qType = (q.options && q.options.length > 0 && q.question_type !== 'text') ? 'mcq' : 'text';
     const opts = (q.options && q.options.length > 0)
       ? q.options.map(o => ({ option_text: o.option_text, is_correct: Boolean(o.is_correct) }))
       : [
@@ -205,9 +205,21 @@ const AssessmentManagement = () => {
     e.preventDefault();
     if (!questionFormData.question_text.trim()) return;
 
+    const isTextType = questionFormData.question_type === 'text';
+    if (!isTextType) {
+      const validOpts = (questionFormData.options || []).filter(o => o.option_text && o.option_text.trim());
+      if (validOpts.length < 2) {
+        alert('Please provide at least 2 options for an MCQ question.');
+        return;
+      }
+      if (!validOpts.some(o => o.is_correct)) {
+        alert('Please mark one option as correct.');
+        return;
+      }
+    }
+
     try {
       setSavingQuestion(true);
-      const isTextType = questionFormData.question_type === 'text';
       const payload = {
         assessment_id: editingAssessment.id,
         question_text: questionFormData.question_text.trim(),

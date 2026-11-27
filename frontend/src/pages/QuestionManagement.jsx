@@ -75,7 +75,7 @@ const QuestionManagement = () => {
   const openEditModal = (q) => {
     setEditingQuestion(q);
     setQuestionText(q.question_text);
-    const qType = q.question_type || (q.options && q.options.length > 0 ? "mcq" : "text");
+    const qType = (q.options && q.options.length > 0 && q.question_type !== "text") ? "mcq" : "text";
     setQuestionType(qType);
     setOptions(
       q.options && q.options.length > 0
