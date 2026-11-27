@@ -337,12 +337,13 @@ const McqInterview = () => {
   // ─────────────────────────────────────────────────────────────
   // ANSWER: Auto-save
   // ─────────────────────────────────────────────────────────────
-  const persistAnswer = async (qId, answerText, markedForReview) => {
+  const persistAnswer = async (qId, answerText, markedForReview, selectedOptionId = null) => {
     try {
       setSavingAnswer(true);
       await api.put(`/assessments/attempts/${attemptId}/save-answer`, {
         questionId: qId,
         answerText,
+        selectedOptionId,
         markedForReview
       });
     } catch (err) {
@@ -355,35 +356,50 @@ const McqInterview = () => {
   const handleAnswerTextChange = (text) => {
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
-    const currentAns = answers[currentQ.id] || { answerText: '', markedForReview: false };
+    const currentAns = answers[currentQ.id] || { answerText: '', selectedOptionId: null, markedForReview: false };
     setAnswers({ ...answers, [currentQ.id]: { ...currentAns, answerText: text } });
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      persistAnswer(currentQ.id, text, currentAns.markedForReview);
+      persistAnswer(currentQ.id, text, currentAns.markedForReview, null);
     }, 600);
+  };
+
+  const handleSelectOption = (optionId) => {
+    const currentQ = questions[currentIndex];
+    if (!currentQ) return;
+    const currentAns = answers[currentQ.id] || { answerText: '', selectedOptionId: null, markedForReview: false };
+    setAnswers({ ...answers, [currentQ.id]: { ...currentAns, selectedOptionId: optionId } });
+    persistAnswer(currentQ.id, currentAns.answerText, currentAns.markedForReview, optionId);
   };
 
   const handleClearAnswer = () => {
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
-    const currentAns = answers[currentQ.id] || { answerText: '', markedForReview: false };
-    setAnswers({ ...answers, [currentQ.id]: { ...currentAns, answerText: '' } });
-    persistAnswer(currentQ.id, '', currentAns.markedForReview);
+    const currentAns = answers[currentQ.id] || { answerText: '', selectedOptionId: null, markedForReview: false };
+    const isMcq = currentQ.question_type === 'mcq' || (currentQ.options && currentQ.options.length > 0);
+    if (isMcq) {
+      setAnswers({ ...answers, [currentQ.id]: { ...currentAns, selectedOptionId: null } });
+      persistAnswer(currentQ.id, currentAns.answerText, currentAns.markedForReview, null);
+    } else {
+      setAnswers({ ...answers, [currentQ.id]: { ...currentAns, answerText: '' } });
+      persistAnswer(currentQ.id, '', currentAns.markedForReview, null);
+    }
   };
 
   const handleToggleReview = () => {
     const currentQ = questions[currentIndex];
     if (!currentQ) return;
-    const currentAns = answers[currentQ.id] || { answerText: '', markedForReview: false };
+    const currentAns = answers[currentQ.id] || { answerText: '', selectedOptionId: null, markedForReview: false };
     const newMarked = !currentAns.markedForReview;
     setAnswers({ ...answers, [currentQ.id]: { ...currentAns, markedForReview: newMarked } });
-    persistAnswer(currentQ.id, currentAns.answerText, newMarked);
+    persistAnswer(currentQ.id, currentAns.answerText, newMarked, currentAns.selectedOptionId);
   };
 
   const handleNext = () => {
     const currentQ = questions[currentIndex];
     if (currentQ && answers[currentQ.id]) {
-      persistAnswer(currentQ.id, answers[currentQ.id].answerText, answers[currentQ.id].markedForReview);
+      const a = answers[currentQ.id];
+      persistAnswer(currentQ.id, a.answerText, a.markedForReview, a.selectedOptionId);
     }
     if (currentIndex < questions.length - 1) setCurrentIndex(currentIndex + 1);
   };
@@ -391,7 +407,8 @@ const McqInterview = () => {
   const handlePrev = () => {
     const currentQ = questions[currentIndex];
     if (currentQ && answers[currentQ.id]) {
-      persistAnswer(currentQ.id, answers[currentQ.id].answerText, answers[currentQ.id].markedForReview);
+      const a = answers[currentQ.id];
+      persistAnswer(currentQ.id, a.answerText, a.markedForReview, a.selectedOptionId);
     }
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   };
@@ -399,7 +416,8 @@ const McqInterview = () => {
   const handleJumpToQuestion = (index) => {
     const currentQ = questions[currentIndex];
     if (currentQ && answers[currentQ.id]) {
-      persistAnswer(currentQ.id, answers[currentQ.id].answerText, answers[currentQ.id].markedForReview);
+      const a = answers[currentQ.id];
+      persistAnswer(currentQ.id, a.answerText, a.markedForReview, a.selectedOptionId);
     }
     setCurrentIndex(index);
   };
@@ -923,15 +941,22 @@ const McqInterview = () => {
   let markedCount = 0;
   questions.forEach(q => {
     const a = answers[q.id];
-    if (a && a.answerText && a.answerText.trim().length > 0) answeredCount++;
+    const isMcq = q.question_type === 'mcq' || (q.options && q.options.length > 0);
+    if (isMcq) {
+      if (a && a.selectedOptionId) answeredCount++;
+    } else {
+      if (a && a.answerText && a.answerText.trim().length > 0) answeredCount++;
+    }
     if (a && a.markedForReview) markedCount++;
   });
   const unansweredCount = totalQuestions - answeredCount;
   const progressPercent = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : null;
-  const currentAnswerText = currentAnswer ? currentAnswer.answerText : '';
+  const currentAnswerText = currentAnswer ? (currentAnswer.answerText || '') : '';
+  const currentSelectedOptionId = currentAnswer ? (currentAnswer.selectedOptionId || null) : null;
   const isMarkedForReview = Boolean(currentAnswer && currentAnswer.markedForReview);
   const wordCount = currentAnswerText ? currentAnswerText.trim().split(/\s+/).filter(Boolean).length : 0;
+  const isMcqQuestion = currentQuestion && (currentQuestion.question_type === 'mcq' || (currentQuestion.options && currentQuestion.options.length > 0));
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-main)' }}>
@@ -1143,38 +1168,92 @@ const McqInterview = () => {
                   {currentQuestion.question_text}
                 </div>
 
-                {/* Answer textarea */}
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <label style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <FileText size={16} color="var(--primary)" />
-                      <span>Your Answer / Explanation:</span>
-                    </label>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      {wordCount} words &bull; {currentAnswerText.length} characters
-                    </span>
+                {/* Answer Section: MCQ Options or Short Answer Textarea */}
+                {isMcqQuestion ? (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.85rem' }}>
+                      Select the correct option:
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {(currentQuestion.options || []).map((opt, oIdx) => {
+                        const isSelected = currentSelectedOptionId === opt.id;
+                        const optionLetter = String.fromCharCode(65 + oIdx);
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleSelectOption(opt.id)}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '1rem 1.25rem',
+                              borderRadius: 'var(--radius-md)',
+                              border: `2px solid ${isSelected ? 'var(--primary)' : 'var(--border-light)'}`,
+                              backgroundColor: isSelected ? 'var(--primary-light)' : '#fcfcfd',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '1rem',
+                              transition: 'all 0.15s ease',
+                              boxShadow: isSelected ? '0 2px 8px rgba(79,70,229,0.12)' : 'none'
+                            }}
+                          >
+                            <span style={{
+                              width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                              border: `2px solid ${isSelected ? 'var(--primary)' : '#cbd5e1'}`,
+                              backgroundColor: isSelected ? 'var(--primary)' : '#ffffff',
+                              color: isSelected ? '#ffffff' : 'var(--text-muted)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontWeight: 700, fontSize: '0.82rem'
+                            }}>
+                              {optionLetter}
+                            </span>
+                            <span style={{
+                              fontSize: '1rem',
+                              fontWeight: isSelected ? 700 : 500,
+                              color: isSelected ? 'var(--primary)' : 'var(--text-main)',
+                              lineHeight: 1.45
+                            }}>
+                              {opt.option_text}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <textarea
-                    rows={8}
-                    placeholder="Type your detailed answer here... (Auto-scored based on key concepts and technical terminology)"
-                    value={currentAnswerText}
-                    onChange={(e) => handleAnswerTextChange(e.target.value)}
-                    className="input-field"
-                    style={{
-                      width: '100%', fontFamily: 'var(--font-sans)',
-                      fontSize: '1rem', lineHeight: 1.6,
-                      padding: '1rem', borderRadius: 'var(--radius-md)',
-                      border: '2px solid var(--border-light)', resize: 'vertical',
-                      backgroundColor: '#fcfcfd', minHeight: '180px'
-                    }}
-                  />
-                </div>
+                ) : (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <label style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <FileText size={16} color="var(--primary)" />
+                        <span>Your Answer:</span>
+                      </label>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        {wordCount} words &bull; {currentAnswerText.length} characters
+                      </span>
+                    </div>
+                    <textarea
+                      rows={6}
+                      placeholder="Type your short answer here..."
+                      value={currentAnswerText}
+                      onChange={(e) => handleAnswerTextChange(e.target.value)}
+                      className="input-field"
+                      style={{
+                        width: '100%', fontFamily: 'var(--font-sans)',
+                        fontSize: '1rem', lineHeight: 1.6,
+                        padding: '1rem', borderRadius: 'var(--radius-md)',
+                        border: '2px solid var(--border-light)', resize: 'vertical',
+                        backgroundColor: '#fcfcfd', minHeight: '150px'
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Navigation */}
               <div className="mcq-bottom-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1.25rem', borderTop: '1px solid var(--border-light)', flexWrap: 'wrap', gap: '0.75rem' }}>
                 <div>
-                  {currentAnswerText.trim().length > 0 && (
+                  {(isMcqQuestion ? Boolean(currentSelectedOptionId) : currentAnswerText.trim().length > 0) && (
                     <button onClick={handleClearAnswer} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)' }}>
                       <RotateCcw size={14} />
                       <span>Clear Answer</span>
@@ -1230,7 +1309,10 @@ const McqInterview = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.6rem' }}>
               {questions.map((q, idx) => {
                 const ans = answers[q.id];
-                const isAnswered = ans && ans.answerText && ans.answerText.trim().length > 0;
+                const qIsMcq = q.question_type === 'mcq' || (q.options && q.options.length > 0);
+                const isAnswered = qIsMcq
+                  ? (ans && ans.selectedOptionId)
+                  : (ans && ans.answerText && ans.answerText.trim().length > 0);
                 const isMarked = ans && ans.markedForReview;
                 const isCurrent = idx === currentIndex;
                 let bg = 'var(--bg-subtle)', color = 'var(--text-secondary)', border = '1px solid var(--border-light)';

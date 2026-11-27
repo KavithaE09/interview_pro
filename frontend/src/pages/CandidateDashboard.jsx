@@ -16,8 +16,45 @@ import {
   FileText,
   AlertCircle,
   HelpCircle,
-  RotateCcw
+  RotateCcw,
+  Layers,
+  Globe
 } from 'lucide-react';
+
+const isEmbedVideo = (url) => {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return (
+    u.includes('youtube.com') ||
+    u.includes('youtu.be') ||
+    u.includes('vimeo.com') ||
+    u.endsWith('.mp4') ||
+    u.endsWith('.webm')
+  );
+};
+
+const getPlatformInfo = (url) => {
+  if (!url) return { name: 'Online Tutorial', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.15)' };
+  const u = url.toLowerCase();
+  if (u.includes('youtube.com') || u.includes('youtu.be')) {
+    return { name: 'YouTube Video', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' };
+  }
+  if (u.includes('udemy.com')) {
+    return { name: 'Udemy Course', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)' };
+  }
+  if (u.includes('coursera.org')) {
+    return { name: 'Coursera Course', color: '#0284c7', bg: 'rgba(2, 132, 199, 0.15)' };
+  }
+  if (u.includes('vimeo.com')) {
+    return { name: 'Vimeo Video', color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.15)' };
+  }
+  try {
+    const domain = new URL(url).hostname.replace('www.', '');
+    return { name: domain, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' };
+  } catch {
+    return { name: 'Website Tutorial', color: '#4f46e5', bg: 'rgba(79, 70, 229, 0.15)' };
+  }
+};
 
 const CandidateDashboard = () => {
   const navigate = useNavigate();
@@ -27,6 +64,7 @@ const CandidateDashboard = () => {
   const [error, setError] = useState('');
   const [modules, setModules] = useState([]);
   const [assessments, setAssessments] = useState([]);
+  const [candidateInfo, setCandidateInfo] = useState(null);
   const [selectedModule, setSelectedModule] = useState(null);
   const [completingId, setCompletingId] = useState(null);
 
@@ -40,6 +78,7 @@ const CandidateDashboard = () => {
       setError('');
       const res = await api.get('/modules/dashboard');
       if (res.data.success) {
+        setCandidateInfo(res.data.candidate || null);
         setModules(res.data.modules || []);
         setAssessments(res.data.assessments || []);
         if (res.data.modules && res.data.modules.length > 0) {
@@ -157,12 +196,31 @@ const CandidateDashboard = () => {
           gap: '1.5rem'
         }}>
           <div>
-            
+            {(candidateInfo?.category_name || user?.category_name) && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.3rem 0.85rem',
+                borderRadius: '999px',
+                background: 'rgba(79, 70, 229, 0.15)',
+                color: '#4f46e5',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                marginBottom: '0.75rem',
+                border: '1px solid rgba(79, 70, 229, 0.25)'
+              }}>
+                <Layers size={14} />
+                <span>Selected Domain: {candidateInfo?.category_name || user?.category_name}</span>
+              </div>
+            )}
             <h1 style={{ fontSize: '1.85rem', fontWeight: 800, margin: '0 0 0.5rem 0' }}>
               Welcome, {user?.name || 'Candidate'}!
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: 0, maxWidth: '650px' }}>
-              Review the training modules and YouTube reference tutorials below. Once you're ready, proceed to take your assigned assessment rounds.
+              {candidateInfo?.category_name || user?.category_name
+                ? `Showing training modules & assessments exclusively for "${candidateInfo?.category_name || user?.category_name}". Review the tutorials and proceed to take your assessment round.`
+                : "Review the training modules and YouTube reference tutorials below. Once you're ready, proceed to take your assigned assessment rounds."}
             </p>
           </div>
 
@@ -231,10 +289,10 @@ const CandidateDashboard = () => {
                   </div>
                   <div>
                     <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0 }}>
-                      Learning Modules & YouTube Tutorials
+                      Learning Modules & Course Tutorials
                     </h2>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                      Watch the training videos to prepare before starting the assessment
+                      Study the training videos or online courses before starting your assessment
                     </p>
                   </div>
                 </div>
@@ -254,7 +312,7 @@ const CandidateDashboard = () => {
                 </div>
               ) : (
                 <div className="dashboard-module-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
-                  {/* Active Video Player & Details */}
+                  {/* Active Video Player or External Course Card */}
                   {selectedModule && (
                     <div style={{
                       background: 'var(--bg-card)',
@@ -263,23 +321,88 @@ const CandidateDashboard = () => {
                       overflow: 'hidden',
                       boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)'
                     }}>
-                      {/* Responsive YouTube Embed */}
-                      <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000000' }}>
-                        <iframe
-                          src={selectedModule.video_url}
-                          title={selectedModule.title}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            border: 'none'
-                          }}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      </div>
+                      {/* Responsive Media Embed or External Course Card */}
+                      {isEmbedVideo(selectedModule.video_url) ? (
+                        <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%', background: '#000000' }}>
+                          <iframe
+                            src={selectedModule.video_url}
+                            title={selectedModule.title}
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              border: 'none'
+                            }}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        </div>
+                      ) : (
+                        <div style={{
+                          position: 'relative',
+                          width: '100%',
+                          padding: '2.5rem 1.75rem',
+                          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          textAlign: 'center',
+                          boxSizing: 'border-box',
+                          gap: '1.15rem'
+                        }}>
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.45rem',
+                            padding: '0.35rem 1rem',
+                            borderRadius: '999px',
+                            background: getPlatformInfo(selectedModule.video_url).bg,
+                            color: getPlatformInfo(selectedModule.video_url).color,
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            <Globe size={14} />
+                            <span>{getPlatformInfo(selectedModule.video_url).name}</span>
+                          </div>
+
+                          <div>
+                            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ffffff', margin: '0 0 0.5rem 0' }}>
+                              {selectedModule.title}
+                            </h3>
+                            <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: 0, maxWidth: '480px', lineHeight: 1.5 }}>
+                              This course is hosted externally. Click below to open and study the course in a new tab. When you finish, mark as completed below.
+                            </p>
+                          </div>
+
+                          <a
+                            href={selectedModule.video_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.6rem',
+                              padding: '0.85rem 1.75rem',
+                              borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                              color: '#ffffff',
+                              fontWeight: 700,
+                              fontSize: '0.925rem',
+                              textDecoration: 'none',
+                              boxShadow: '0 4px 14px rgba(79, 70, 229, 0.4)',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <span>Open {getPlatformInfo(selectedModule.video_url).name} in New Tab</span>
+                            <ExternalLink size={16} />
+                          </a>
+                        </div>
+                      )}
 
                       {/* Video Info & Action Footer */}
                       <div style={{ padding: '1.75rem' }}>
@@ -458,12 +581,15 @@ const CandidateDashboard = () => {
             {/* Section 2: Assigned Assessments */}
             <section>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
-                
                 <div>
                   <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0 }}>
-                    My Assigned Assessments
+                    My Assigned Assessments {(candidateInfo?.category_name || user?.category_name) ? `(${candidateInfo?.category_name || user?.category_name})` : ''}
                   </h2>
-                 
+                  {(candidateInfo?.category_name || user?.category_name) && (
+                    <p style={{ fontSize: '0.825rem', color: 'var(--text-muted)', margin: '0.2rem 0 0 0' }}>
+                      Showing assessments exclusively for the &ldquo;{candidateInfo?.category_name || user?.category_name}&rdquo; category.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -477,7 +603,11 @@ const CandidateDashboard = () => {
                   color: 'var(--text-muted)'
                 }}>
                   <HelpCircle size={40} style={{ opacity: 0.4, marginBottom: '1rem' }} />
-                  <p>No assessments currently assigned to your account.</p>
+                  <p>
+                    {(candidateInfo?.category_name || user?.category_name)
+                      ? `No assessments are currently published under the "${candidateInfo?.category_name || user?.category_name}" category.`
+                      : 'No assessments currently assigned to your account.'}
+                  </p>
                 </div>
               ) : (
                 <div className="dashboard-assessments-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>

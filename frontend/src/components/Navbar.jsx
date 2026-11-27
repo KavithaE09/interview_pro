@@ -31,23 +31,6 @@ const Navbar = ({ assessmentTitle = null, timerComponent = null }) => {
         }
       `}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '4px 8px',
-          background: '#ffffff',
-          borderRadius: '8px',
-          border: '1px solid var(--border-light, #e2e8f0)',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-        }}>
-          <img
-            src="/logo.png"
-            alt="Med Manor Organics"
-            className="nav-brand-logo"
-            style={{ height: '42px', maxWidth: '180px', objectFit: 'contain' }}
-          />
-        </div>
-        <div className="nav-divider" style={{ height: '24px', width: '1px', background: 'var(--border-light, #e2e8f0)' }}></div>
         {assessmentTitle ? (
           <div>
             <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>

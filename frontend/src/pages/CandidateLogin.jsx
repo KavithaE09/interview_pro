@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { Terminal, User, Mail, Phone, ArrowRight, BookOpen, CheckCircle, ShieldCheck } from 'lucide-react';
+import { Terminal, User, Mail, Phone, ArrowRight, BookOpen, CheckCircle, ShieldCheck, Layers, ChevronDown } from 'lucide-react';
 
 const CandidateLogin = () => {
   const navigate = useNavigate();
@@ -12,10 +12,36 @@ const CandidateLogin = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [categoryId, setCategoryId] = useState('');
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const redirectPath = location.state?.from || '/candidate/dashboard';
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true);
+        const res = await api.get('/auth/categories');
+        if (res.data.success && Array.isArray(res.data.categories)) {
+          setCategories(res.data.categories);
+          const savedCatId = localStorage.getItem('interviewpro_candidate_category_id');
+          if (savedCatId && res.data.categories.some(c => String(c.id) === String(savedCatId))) {
+            setCategoryId(savedCatId);
+          } else if (res.data.categories.length === 1) {
+            setCategoryId(String(res.data.categories[0].id));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load categories:', err);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,6 +64,11 @@ const CandidateLogin = () => {
       return;
     }
 
+    if (!categoryId) {
+      setError('Please choose an assessment category from the dropdown.');
+      return;
+    }
+
     if (phone.trim()) {
       const cleanPhone = phone.trim().replace(/[\s\-\(\)\.]/g, '').replace(/^(\+91|91(?=\d{10}$)|0(?=\d{10}$))/, '');
       if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
@@ -51,10 +82,12 @@ const CandidateLogin = () => {
       const res = await api.post('/auth/candidate-login', {
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        phone: phone.trim()
+        phone: phone.trim(),
+        categoryId: Number(categoryId)
       });
 
       if (res.data.success) {
+        localStorage.setItem('interviewpro_candidate_category_id', categoryId);
         login(res.data.token, res.data.user);
         navigate(redirectPath, { replace: true });
       } else {
@@ -194,6 +227,51 @@ const CandidateLogin = () => {
                 }}
               />
             </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 700, color: '#334155', marginBottom: '0.45rem' }}>
+              Assessment Category <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Layers size={18} color="#64748b" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                required
+                disabled={categoriesLoading}
+                style={{
+                  width: '100%',
+                  padding: '0.8rem 2.5rem 0.8rem 2.75rem',
+                  borderRadius: '10px',
+                  background: '#f8fafc',
+                  border: '1.5px solid #cbd5e1',
+                  color: categoryId ? '#0f172a' : '#64748b',
+                  fontSize: '0.925rem',
+                  fontWeight: categoryId ? 600 : 400,
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  WebkitAppearance: 'none'
+                }}
+              >
+                <option value="" disabled style={{ color: '#94a3b8' }}>
+                  {categoriesLoading ? 'Loading available categories...' : '-- Choose your assessment category --'}
+                </option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id} style={{ color: '#0f172a', fontWeight: 500 }}>
+                    {cat.category_name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={18} color="#64748b" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            </div>
+            {categoryId && (
+              <div style={{ fontSize: '0.78rem', color: '#4f46e5', marginTop: '0.35rem', fontWeight: 600 }}>
+                ✓ Only assessments in &ldquo;{categories.find(c => String(c.id) === String(categoryId))?.category_name}&rdquo; will be available.
+              </div>
+            )}
           </div>
 
           <div>

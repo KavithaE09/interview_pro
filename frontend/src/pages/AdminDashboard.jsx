@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import { Users, FileCheck, FolderKanban, Award, ArrowRight, PlusCircle, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -61,65 +61,151 @@ const AdminDashboard = () => {
 
 
           {/* Quick Management Shortcuts */}
+          <style>{`
+            .admin-shortcut-card {
+              background: #ffffff;
+              border: 1.5px solid var(--border-light, #e2e8f0);
+              border-radius: 14px;
+              padding: 1.35rem 1.4rem;
+              cursor: pointer;
+              transition: all 0.25s ease;
+              display: flex;
+              flex-direction: column;
+              justifyContent: space-between;
+              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+              height: 100%;
+              box-sizing: border-box;
+            }
+            .admin-shortcut-card:hover {
+              transform: translateY(-2px);
+              border-color: var(--primary, #4f46e5);
+              box-shadow: 0 8px 20px -4px rgba(79, 70, 229, 0.12);
+            }
+            .admin-shortcut-card:hover .shortcut-arrow-circle {
+              background: var(--primary, #4f46e5) !important;
+            }
+            .admin-shortcut-card:hover .shortcut-arrow-circle svg {
+              color: #ffffff !important;
+              stroke: #ffffff !important;
+              transform: translateX(2px);
+            }
+          `}</style>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2.5rem' }}>
             <div
               onClick={() => navigate('/admin/categories')}
-              className="card"
-              style={{ padding: '1.5rem', cursor: 'pointer', transition: 'var(--transition)' }}
+              className="admin-shortcut-card"
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FolderKanban size={20} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: 0, lineHeight: 1.35 }}>
+                    Category Management
+                  </h3>
+                  <div className="shortcut-arrow-circle" style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <ChevronRight size={16} color="#64748b" style={{ transition: 'all 0.2s ease' }} />
+                  </div>
                 </div>
-                <ChevronRight size={18} color="var(--text-light)" />
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  Configure interview domains like Digital Marketing, GA4, Excel.
+                </p>
               </div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Category Management</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Configure interview domains like Digital Marketing, GA4, Excel.</p>
             </div>
 
             <div
               onClick={() => navigate('/admin/assessments')}
-              className="card"
-              style={{ padding: '1.5rem', cursor: 'pointer', transition: 'var(--transition)' }}
+              className="admin-shortcut-card"
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--secondary-light)', color: 'var(--secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FileCheck size={20} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: 0, lineHeight: 1.35 }}>
+                    Assessments & Questions
+                  </h3>
+                  <div className="shortcut-arrow-circle" style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <ChevronRight size={16} color="#64748b" style={{ transition: 'all 0.2s ease' }} />
+                  </div>
                 </div>
-                <ChevronRight size={18} color="var(--text-light)" />
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  Set durations, passing marks, add 4 options, and publish tests.
+                </p>
               </div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Assessments & Questions</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Set durations, passing marks, add 4 options, and publish tests.</p>
             </div>
 
             <div
               onClick={() => navigate('/admin/candidates')}
-              className="card"
-              style={{ padding: '1.5rem', cursor: 'pointer', transition: 'var(--transition)' }}
+              className="admin-shortcut-card"
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--teal-light)', color: 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Users size={20} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: 0, lineHeight: 1.35 }}>
+                    Candidate Management
+                  </h3>
+                  <div className="shortcut-arrow-circle" style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <ChevronRight size={16} color="#64748b" style={{ transition: 'all 0.2s ease' }} />
+                  </div>
                 </div>
-                <ChevronRight size={18} color="var(--text-light)" />
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  Search registered candidates and allocate assessment rounds.
+                </p>
               </div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Candidate Management</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Search registered candidates and allocate assessment rounds.</p>
             </div>
 
             <div
               onClick={() => navigate('/admin/results')}
-              className="card"
-              style={{ padding: '1.5rem', cursor: 'pointer', transition: 'var(--transition)' }}
+              className="admin-shortcut-card"
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--success-light)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Award size={20} />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: 0, lineHeight: 1.35 }}>
+                    Scores & Analytics
+                  </h3>
+                  <div className="shortcut-arrow-circle" style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <ChevronRight size={16} color="#64748b" style={{ transition: 'all 0.2s ease' }} />
+                  </div>
                 </div>
-                <ChevronRight size={18} color="var(--text-light)" />
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+                  Inspect detailed correct/incorrect answer breakdowns.
+                </p>
               </div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.25rem' }}>Scores & Analytics</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Inspect detailed correct/incorrect answer breakdowns.</p>
             </div>
           </div>
 

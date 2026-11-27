@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import {ShieldCheck,Lock,Mail,User,Phone,ArrowRight,UserPlus,LogIn,CheckCircle2,AlertCircle,ArrowLeft} from 'lucide-react';
+import {Lock,Mail,User,Phone,ArrowRight,UserPlus,LogIn,CheckCircle2,AlertCircle} from 'lucide-react';
 
 const AdminLogin = () => {
 
@@ -198,7 +198,7 @@ const AdminLogin = () => {
               transition: 'all 0.2s ease'
             }}
           >
-            <LogIn size={15} />
+            
             <span>Admin Sign In</span>
           </button>
           <button
@@ -221,7 +221,7 @@ const AdminLogin = () => {
               transition: 'all 0.2s ease'
             }}
           >
-            <UserPlus size={15} />
+            
             <span>Register Admin</span>
           </button>
         </div>
@@ -391,7 +391,7 @@ const AdminLogin = () => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Sarah Jenkins"
+                  placeholder="e.g. Sarah "
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   style={{
@@ -453,7 +453,7 @@ const AdminLogin = () => {
                 <input
                   type="tel"
                   required
-                  placeholder="e.g. 9876543210 or +91 9876543210"
+                  placeholder="e.g. 9876543210 "
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   style={{
@@ -472,7 +472,6 @@ const AdminLogin = () => {
                   }}
                 />
               </div>
-              <p style={{ margin: '0.3rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>10-digit Indian mobile number</p>
             </div>
 
             {/* Password */}

@@ -45,8 +45,11 @@ router.patch('/assessments/:id/toggle-publish', togglePublishAssessment);
 
 // Question CRUD
 router.post('/questions', addQuestion);
+router.post('/questions/mcq', addQuestion);
 router.put('/questions/:id', updateQuestion);
+router.put('/questions/mcq/:id', updateQuestion);
 router.delete('/questions/:id', deleteQuestion);
+router.delete('/questions/mcq/:id', deleteQuestion);
 
 // Candidate management
 router.get('/candidates', getAllCandidates);

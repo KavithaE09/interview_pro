@@ -473,17 +473,31 @@ const getAssessmentQuestions = async (req, res) => {
       });
     }
 
-    // Fetch open-ended questions (do NOT expose expected keywords before submission)
+    // Fetch questions: Open-ended OR MCQ with options
     const [questions] = await pool.query(`
-      SELECT id, question_text, marks, question_order
+      SELECT id, question_text, marks, question_order, question_type
       FROM questions
       WHERE assessment_id = ?
       ORDER BY question_order ASC, id ASC
     `, [attempt.assessment_id]);
 
-    // Fetch previously saved candidate text answers
+    for (const q of questions) {
+      if (q.question_type === 'mcq') {
+        const [opts] = await pool.query(`
+          SELECT id, question_id, option_text
+          FROM question_options
+          WHERE question_id = ?
+          ORDER BY id ASC
+        `, [q.id]);
+        q.options = opts;
+      } else {
+        q.options = [];
+      }
+    }
+
+    // Fetch previously saved candidate answers
     const [savedAnswers] = await pool.query(`
-      SELECT question_id, answer_text, marked_for_review
+      SELECT question_id, answer_text, selected_option_id, marked_for_review
       FROM candidate_answers
       WHERE attempt_id = ?
     `, [attemptId]);
@@ -492,6 +506,7 @@ const getAssessmentQuestions = async (req, res) => {
     savedAnswers.forEach(ans => {
       answersMap[ans.question_id] = {
         answerText: ans.answer_text || '',
+        selectedOptionId: ans.selected_option_id || null,
         markedForReview: Boolean(ans.marked_for_review)
       };
     });
@@ -571,11 +586,11 @@ const getRemainingTime = async (req, res) => {
   }
 };
 
-// 5. Save/Update Candidate Text Answer during assessment (Auto-save)
+// 5. Save/Update Candidate Text / MCQ Answer during assessment (Auto-save)
 const saveTextAnswer = async (req, res) => {
   try {
     const { attemptId } = req.params;
-    const { questionId, answerText = '', markedForReview = false } = req.body;
+    const { questionId, answerText = '', selectedOptionId = null, markedForReview = false } = req.body;
     const candidateId = req.user ? req.user.id : null;
 
     if (!questionId) {
@@ -618,25 +633,28 @@ const saveTextAnswer = async (req, res) => {
     }
 
     const isMarked = markedForReview ? 1 : 0;
+    const optId = selectedOptionId ? Number(selectedOptionId) : null;
 
     await pool.query(`
-      INSERT INTO candidate_answers (attempt_id, question_id, answer_text, marked_for_review)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO candidate_answers (attempt_id, question_id, answer_text, selected_option_id, marked_for_review)
+      VALUES (?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE 
         answer_text = VALUES(answer_text),
+        selected_option_id = VALUES(selected_option_id),
         marked_for_review = VALUES(marked_for_review),
         answered_at = CURRENT_TIMESTAMP
-    `, [attemptId, questionId, answerText, isMarked]);
+    `, [attemptId, questionId, answerText, optId, isMarked]);
 
     return res.status(200).json({
       success: true,
       message: 'Answer saved successfully.',
       questionId,
       answerText,
+      selectedOptionId: optId,
       markedForReview: Boolean(isMarked)
     });
   } catch (error) {
-    console.error('Error saving text answer:', error);
+    console.error('Error saving answer:', error);
     return res.status(500).json({ success: false, message: 'Server error saving answer.' });
   }
 };
@@ -661,22 +679,22 @@ async function calculateAndFinalizeAttempt(attemptId, submissionType = 'submitte
     return attempt;
   }
 
-  // Fetch all questions with expected keywords
+  // Fetch all questions with expected keywords and question_type
   const [questions] = await pool.query(`
-    SELECT q.id AS question_id, q.marks, q.expected_keywords, q.explanation
+    SELECT q.id AS question_id, q.marks, q.expected_keywords, q.explanation, q.question_type
     FROM questions q
     WHERE q.assessment_id = ?
   `, [attempt.assessment_id]);
 
   const [answers] = await pool.query(`
-    SELECT question_id, answer_text
+    SELECT question_id, answer_text, selected_option_id
     FROM candidate_answers
     WHERE attempt_id = ?
   `, [attemptId]);
 
   const answerMap = {};
   answers.forEach(a => {
-    answerMap[a.question_id] = a.answer_text || '';
+    answerMap[a.question_id] = a;
   });
 
   let totalScore = 0;
@@ -685,45 +703,87 @@ async function calculateAndFinalizeAttempt(attemptId, submissionType = 'submitte
   let unansweredCount = 0;
 
   for (const q of questions) {
-    const rawAnswer = (answerMap[q.question_id] || '').trim();
+    const userAns = answerMap[q.question_id];
+    const isMcq = q.question_type === 'mcq';
 
-    if (!rawAnswer || rawAnswer.length < 5) {
-      unansweredCount++;
-      await pool.query(
-        'INSERT INTO candidate_answers (attempt_id, question_id, answer_text, score_awarded, keywords_matched) VALUES (?, ?, ?, 0, "") ON DUPLICATE KEY UPDATE score_awarded = 0, keywords_matched = ""',
-        [attemptId, q.question_id, rawAnswer]
-      );
-      continue;
-    }
+    if (isMcq) {
+      // Evaluate MCQ option
+      const [options] = await pool.query(`
+        SELECT id, is_correct FROM question_options WHERE question_id = ?
+      `, [q.question_id]);
 
-    const normAnswer = rawAnswer.toLowerCase();
-    const keywordList = (q.expected_keywords || '')
-      .split(',')
-      .map(k => k.trim().toLowerCase())
-      .filter(Boolean);
+      const correctOption = options.find(o => o.is_correct === 1 || o.is_correct === true);
+      const selectedId = userAns ? userAns.selected_option_id : null;
 
-    // Identify which keywords candidate included
-    const matchedKeywords = keywordList.filter(kw => normAnswer.includes(kw));
-
-    // Dynamic keyword-based scoring:
-    // If candidate mentions key concepts, score is awarded proportionally
-    // Matching 3 or more concepts (or 35%+ of keywords) yields full/high marks
-    const targetKeywordsCount = Math.min(3, Math.ceil(keywordList.length * 0.35));
-    const matchRatio = Math.min(1, matchedKeywords.length / Math.max(1, targetKeywordsCount));
-    const scoreAwarded = Number((matchRatio * Number(q.marks)).toFixed(1));
-
-    if (scoreAwarded >= (Number(q.marks) * 0.5)) {
-      correctCount++;
+      if (!selectedId) {
+        unansweredCount++;
+        await pool.query(`
+          INSERT INTO candidate_answers (attempt_id, question_id, score_awarded, keywords_matched)
+          VALUES (?, ?, 0, '')
+          ON DUPLICATE KEY UPDATE score_awarded = 0, keywords_matched = ''
+        `, [attemptId, q.question_id]);
+      } else if (correctOption && selectedId === correctOption.id) {
+        correctCount++;
+        const marksAwarded = Number(q.marks);
+        totalScore += marksAwarded;
+        await pool.query(`
+          INSERT INTO candidate_answers (attempt_id, question_id, selected_option_id, score_awarded, keywords_matched)
+          VALUES (?, ?, ?, ?, 'Correct Option Selected')
+          ON DUPLICATE KEY UPDATE selected_option_id = VALUES(selected_option_id), score_awarded = VALUES(score_awarded), keywords_matched = 'Correct Option Selected'
+        `, [attemptId, q.question_id, selectedId, marksAwarded]);
+      } else {
+        incorrectCount++;
+        await pool.query(`
+          INSERT INTO candidate_answers (attempt_id, question_id, selected_option_id, score_awarded, keywords_matched)
+          VALUES (?, ?, ?, 0, 'Incorrect Option')
+          ON DUPLICATE KEY UPDATE selected_option_id = VALUES(selected_option_id), score_awarded = 0, keywords_matched = 'Incorrect Option'
+        `, [attemptId, q.question_id, selectedId]);
+      }
     } else {
-      incorrectCount++;
+      // Open-ended / Short Answer 
+      const rawAnswer = userAns ? (userAns.answer_text || '').trim() : '';
+
+      if (!rawAnswer || rawAnswer.length === 0) {
+        unansweredCount++;
+        await pool.query(
+          'INSERT INTO candidate_answers (attempt_id, question_id, answer_text, score_awarded, keywords_matched) VALUES (?, ?, ?, 0, "") ON DUPLICATE KEY UPDATE score_awarded = 0, keywords_matched = ""',
+          [attemptId, q.question_id, rawAnswer]
+        );
+        continue;
+      }
+
+      const normAnswer = rawAnswer.toLowerCase();
+      const keywordList = (q.expected_keywords || '')
+        .split(',')
+        .map(k => k.trim().toLowerCase())
+        .filter(Boolean);
+
+      // Identify which keywords candidate included
+      const matchedKeywords = keywordList.filter(kw => normAnswer.includes(kw));
+
+      let scoreAwarded = 0;
+      if (keywordList.length > 0) {
+        const targetKeywordsCount = Math.min(3, Math.ceil(keywordList.length * 0.35));
+        const matchRatio = Math.min(1, matchedKeywords.length / Math.max(1, targetKeywordsCount));
+        scoreAwarded = Number((matchRatio * Number(q.marks)).toFixed(1));
+      } else {
+        // If no keywords specified, award full marks if answered
+        scoreAwarded = Number(q.marks);
+      }
+
+      if (scoreAwarded >= (Number(q.marks) * 0.5)) {
+        correctCount++;
+      } else {
+        incorrectCount++;
+      }
+
+      totalScore += scoreAwarded;
+
+      await pool.query(
+        'INSERT INTO candidate_answers (attempt_id, question_id, answer_text, score_awarded, keywords_matched) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE score_awarded = VALUES(score_awarded), keywords_matched = VALUES(keywords_matched)',
+        [attemptId, q.question_id, rawAnswer, scoreAwarded, matchedKeywords.join(', ')]
+      );
     }
-
-    totalScore += scoreAwarded;
-
-    await pool.query(
-      'INSERT INTO candidate_answers (attempt_id, question_id, answer_text, score_awarded, keywords_matched) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE score_awarded = VALUES(score_awarded), keywords_matched = VALUES(keywords_matched)',
-      [attemptId, q.question_id, rawAnswer, scoreAwarded, matchedKeywords.join(', ')]
-    );
   }
 
   const finalScore = Number(totalScore.toFixed(2));
@@ -855,14 +915,26 @@ const getAttemptResult = async (req, res) => {
     }
 
     const [questions] = await pool.query(`
-      SELECT id, question_text, marks, question_order, expected_keywords, explanation
+      SELECT id, question_text, marks, question_order, expected_keywords, explanation, question_type
       FROM questions
       WHERE assessment_id = ?
       ORDER BY question_order ASC, id ASC
     `, [attempt.assessment_id]);
 
+    // For each question, attach options (with is_correct if allow_view_answers)
+    for (const q of questions) {
+      if (q.question_type === 'mcq') {
+        const [opts] = await pool.query(`
+          SELECT id, option_text, is_correct FROM question_options WHERE question_id = ? ORDER BY id ASC
+        `, [q.id]);
+        q.options = opts;
+      } else {
+        q.options = [];
+      }
+    }
+
     const [candidateAnswers] = await pool.query(`
-      SELECT question_id, answer_text, score_awarded, keywords_matched
+      SELECT question_id, answer_text, selected_option_id, score_awarded, keywords_matched
       FROM candidate_answers
       WHERE attempt_id = ?
     `, [attemptId]);
@@ -878,10 +950,15 @@ const getAttemptResult = async (req, res) => {
 
     const questionsReview = questions.map(q => {
       const userAns = answerMap[q.id];
+      const isMcq = q.question_type === 'mcq';
       const answerText = userAns ? (userAns.answer_text || '') : '';
+      const selectedOptionId = userAns ? (userAns.selected_option_id || null) : null;
       const scoreAwarded = userAns ? Number(userAns.score_awarded || 0) : 0;
       const matchedKeywords = userAns ? (userAns.keywords_matched || '') : '';
-      const isUnanswered = !answerText || answerText.trim().length === 0;
+
+      const isUnanswered = isMcq
+        ? !selectedOptionId
+        : (!answerText || answerText.trim().length === 0);
       const isPassedQuestion = scoreAwarded >= (Number(q.marks) * 0.5);
 
       if (isUnanswered) {
@@ -897,7 +974,10 @@ const getAttemptResult = async (req, res) => {
         questionText: q.question_text,
         marks: q.marks,
         questionOrder: q.question_order,
+        questionType: q.question_type || 'text',
         candidateAnswer: answerText,
+        selectedOptionId,
+        options: attempt.allow_view_answers ? q.options : (q.options || []).map(o => ({ id: o.id, option_text: o.option_text })),
         scoreAwarded,
         matchedKeywords: matchedKeywords ? matchedKeywords.split(', ') : [],
         expectedKeywords: attempt.allow_view_answers && q.expected_keywords ? q.expected_keywords.split(',') : [],

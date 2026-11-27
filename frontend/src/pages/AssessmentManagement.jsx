@@ -4,7 +4,7 @@ import api from '../services/api';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import Modal from '../components/Modal';
-import { FileCheck, PlusCircle, Edit2, Trash2, HelpCircle, UserPlus, Clock, CheckCircle2, AlertCircle, Link2, Users, Layers, Settings } from 'lucide-react';
+import { FileCheck, PlusCircle, Edit2, Trash2, HelpCircle, UserPlus, Clock, CheckCircle2, AlertCircle, Link2, Users, Layers, Settings, Check, X } from 'lucide-react';
 
 const AssessmentManagement = () => {
   const navigate = useNavigate();
@@ -39,8 +39,15 @@ const AssessmentManagement = () => {
   const [questionFormData, setQuestionFormData] = useState({
     question_text: '',
     marks: 10,
+    question_type: 'mcq',
     expected_keywords: '',
-    explanation: ''
+    explanation: '',
+    options: [
+      { option_text: '', is_correct: true },
+      { option_text: '', is_correct: false },
+      { option_text: '', is_correct: false },
+      { option_text: '', is_correct: false }
+    ]
   });
   const [savingQuestion, setSavingQuestion] = useState(false);
 
@@ -49,6 +56,11 @@ const AssessmentManagement = () => {
   const [assigningAssessment, setAssigningAssessment] = useState(null);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
   const [assignLoading, setAssignLoading] = useState(false);
+
+  // Delete Confirmation States
+  const [assessmentToDelete, setAssessmentToDelete] = useState(null);
+  const [questionToDelete, setQuestionToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -147,11 +159,22 @@ const AssessmentManagement = () => {
         kw = q.expected_keywords;
       }
     }
+    const qType = q.question_type || (q.options && q.options.length > 0 ? 'mcq' : 'text');
+    const opts = (q.options && q.options.length > 0)
+      ? q.options.map(o => ({ option_text: o.option_text, is_correct: Boolean(o.is_correct) }))
+      : [
+          { option_text: '', is_correct: true },
+          { option_text: '', is_correct: false },
+          { option_text: '', is_correct: false },
+          { option_text: '', is_correct: false }
+        ];
     setQuestionFormData({
       question_text: q.question_text || '',
       marks: q.marks || 10,
+      question_type: qType,
       expected_keywords: kw,
-      explanation: q.explanation || ''
+      explanation: q.explanation || '',
+      options: opts
     });
   };
 
@@ -161,8 +184,15 @@ const AssessmentManagement = () => {
     setQuestionFormData({
       question_text: '',
       marks: 10,
+      question_type: 'mcq',
       expected_keywords: '',
-      explanation: ''
+      explanation: '',
+      options: [
+        { option_text: '', is_correct: true },
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false },
+        { option_text: '', is_correct: false }
+      ]
     });
   };
 
@@ -177,29 +207,23 @@ const AssessmentManagement = () => {
 
     try {
       setSavingQuestion(true);
-      const keywordsArray = questionFormData.expected_keywords
-        .split(',')
-        .map(k => k.trim())
-        .filter(Boolean);
+      const isTextType = questionFormData.question_type === 'text';
+      const payload = {
+        assessment_id: editingAssessment.id,
+        question_text: questionFormData.question_text.trim(),
+        marks: Number(questionFormData.marks) || 10,
+        question_order: editingQuestionItem ? (editingQuestionItem.question_order || 1) : assessmentQuestions.length + 1,
+        explanation: questionFormData.explanation,
+        question_type: questionFormData.question_type || 'mcq',
+        expected_keywords: isTextType ? questionFormData.expected_keywords : '',
+        options: isTextType ? [] : (questionFormData.options || [])
+      };
 
       if (isAddingNewQuestion) {
-        await api.post('/admin/questions/mcq', {
-          assessment_id: editingAssessment.id,
-          question_text: questionFormData.question_text.trim(),
-          marks: Number(questionFormData.marks) || 10,
-          question_order: assessmentQuestions.length + 1,
-          explanation: questionFormData.explanation,
-          expected_keywords: keywordsArray
-        });
+        await api.post('/admin/questions', payload);
         setSuccessMsg('Question added successfully!');
       } else if (editingQuestionItem) {
-        await api.put(`/admin/questions/mcq/${editingQuestionItem.id}`, {
-          question_text: questionFormData.question_text.trim(),
-          marks: Number(questionFormData.marks) || 10,
-          question_order: editingQuestionItem.question_order || 1,
-          explanation: questionFormData.explanation,
-          expected_keywords: keywordsArray
-        });
+        await api.put(`/admin/questions/${editingQuestionItem.id}`, payload);
         setSuccessMsg('Question updated successfully!');
       }
 
@@ -215,16 +239,22 @@ const AssessmentManagement = () => {
     }
   };
 
-  const handleDeleteQuestion = async (questionId) => {
-    if (!window.confirm('Are you sure you want to delete this question?')) return;
+  const handleConfirmDeleteQuestion = async () => {
+    if (!questionToDelete) return;
     try {
-      await api.delete(`/admin/questions/${questionId}`);
+      setDeleteLoading(true);
+      await api.delete(`/admin/questions/${questionToDelete.id}`);
       setSuccessMsg('Question deleted successfully!');
-      await fetchAssessmentQuestions(editingAssessment.id);
+      if (editingAssessment?.id) {
+        await fetchAssessmentQuestions(editingAssessment.id);
+      }
+      setQuestionToDelete(null);
       fetchInitialData();
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete question.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -276,18 +306,20 @@ const AssessmentManagement = () => {
     }
   };
 
-  const handleDeleteAssessment = async (asmId) => {
-    if (!window.confirm('Are you sure you want to delete this assessment? All associated questions and attempts will be removed.')) {
-      return;
-    }
+  const handleConfirmDeleteAssessment = async () => {
+    if (!assessmentToDelete) return;
 
     try {
-      await api.delete(`/admin/assessments/${asmId}`);
-      setSuccessMsg('Assessment deleted successfully.');
+      setDeleteLoading(true);
+      await api.delete(`/admin/assessments/${assessmentToDelete.id}`);
+      setSuccessMsg(`Assessment "${assessmentToDelete.title}" deleted successfully.`);
+      setAssessmentToDelete(null);
       fetchInitialData();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete assessment.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -445,7 +477,7 @@ const AssessmentManagement = () => {
                         </td>
                         <td>
                           <span className="badge badge-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <Layers size={12} />
+                            
                             <span>{asm.category_name || 'General'}</span>
                           </span>
                         </td>
@@ -464,7 +496,7 @@ const AssessmentManagement = () => {
                             className="btn btn-secondary btn-sm"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
-                            <HelpCircle size={13} color="var(--primary)" />
+                            
                             <span>{asm.question_count || 0} Questions</span>
                           </button>
                         </td>
@@ -475,7 +507,7 @@ const AssessmentManagement = () => {
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             title="Assign to Candidates"
                           >
-                            <UserPlus size={13} />
+                            
                             <span>{asm.assigned_count || 0} Assigned</span>
                           </button>
                         </td>
@@ -506,7 +538,7 @@ const AssessmentManagement = () => {
                               <Edit2 size={14} />
                             </button>
                             <button
-                              onClick={() => handleDeleteAssessment(asm.id)}
+                              onClick={() => setAssessmentToDelete(asm)}
                               className="btn btn-danger btn-sm"
                               title="Delete Assessment"
                             >
@@ -632,7 +664,7 @@ const AssessmentManagement = () => {
                     cursor: 'pointer'
                   }}
                 >
-                  Edit Questions →
+                  Edit Questions
                 </button>
               </div>
             )}
@@ -895,37 +927,57 @@ const AssessmentManagement = () => {
                   <button
                     type="button"
                     onClick={handleCancelQuestionEdit}
-                    style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+                    style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                   >
-                    ✕ Close
+                    <X size={14} />
+                    <span>Close</span>
                   </button>
                 </div>
 
                 <form onSubmit={handleSaveQuestion} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
-                      Question Statement *
-                    </label>
+                      Question Statement *</label>
                     <textarea
-                      required
                       rows={3}
-                      placeholder="e.g. What is the difference between CPM and CPC in Meta Ads campaign optimization?"
+                      required
+                      placeholder="Type the question here..."
                       value={questionFormData.question_text}
                       onChange={(e) => setQuestionFormData({ ...questionFormData, question_text: e.target.value })}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '0.75rem 0.9rem',
-                        fontSize: '0.925rem',
-                        color: '#0f172a',
-                        background: '#ffffff',
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: '8px',
-                        outline: 'none',
-                        fontFamily: 'inherit',
-                        resize: 'vertical'
-                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '0.75rem 0.9rem', fontSize: '0.925rem', color: '#0f172a', background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontFamily: 'inherit', resize: 'vertical' }}
                     />
+                  </div>
+
+                  {/* Question Type Toggle */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>
+                      Question Type *
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {[
+                        { val: 'mcq', label: 'Multiple Choice (MCQ)' },
+                        { val: 'text', label: 'Short Answer' }
+                      ].map(({ val, label }) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setQuestionFormData({ ...questionFormData, question_type: val })}
+                          style={{
+                            padding: '0.5rem 1rem',
+                            borderRadius: '8px',
+                            border: `2px solid ${questionFormData.question_type === val ? '#6366f1' : '#e2e8f0'}`,
+                            background: questionFormData.question_type === val ? '#eef2ff' : '#f8fafc',
+                            color: questionFormData.question_type === val ? '#4f46e5' : '#64748b',
+                            fontWeight: 700,
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1rem' }}>
@@ -934,52 +986,93 @@ const AssessmentManagement = () => {
                         Marks *
                       </label>
                       <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        required
+                        type="number" min="1" max="100" required
                         value={questionFormData.marks}
                         onChange={(e) => setQuestionFormData({ ...questionFormData, marks: e.target.value })}
-                        style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          height: '42px',
-                          padding: '0 0.85rem',
-                          fontSize: '0.925rem',
-                          color: '#0f172a',
-                          background: '#ffffff',
-                          border: '1.5px solid #cbd5e1',
-                          borderRadius: '8px',
-                          outline: 'none',
-                          fontFamily: 'inherit'
-                        }}
+                        style={{ width: '100%', boxSizing: 'border-box', height: '42px', padding: '0 0.85rem', fontSize: '0.925rem', color: '#0f172a', background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontFamily: 'inherit' }}
                       />
                     </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
-                        Expected Keywords for Auto-Scoring <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 400 }}>(Comma-separated)</span>
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. CPM, CPC, Cost Per Click, Cost Per Mille, Impression"
-                        value={questionFormData.expected_keywords}
-                        onChange={(e) => setQuestionFormData({ ...questionFormData, expected_keywords: e.target.value })}
-                        style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          height: '42px',
-                          padding: '0 0.85rem',
-                          fontSize: '0.925rem',
-                          color: '#0f172a',
-                          background: '#ffffff',
-                          border: '1.5px solid #cbd5e1',
-                          borderRadius: '8px',
-                          outline: 'none',
-                          fontFamily: 'inherit'
-                        }}
-                      />
-                    </div>
+                    {questionFormData.question_type === 'text' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
+                          Expected Keywords for Auto-Scoring <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 400 }}>(Comma-separated)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. CPM, CPC, Cost Per Click"
+                          value={questionFormData.expected_keywords}
+                          onChange={(e) => setQuestionFormData({ ...questionFormData, expected_keywords: e.target.value })}
+                          style={{ width: '100%', boxSizing: 'border-box', height: '42px', padding: '0 0.85rem', fontSize: '0.925rem', color: '#0f172a', background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontFamily: 'inherit' }}
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  {/* MCQ Options */}
+                  {questionFormData.question_type === 'mcq' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.5rem' }}>
+                        Answer Options <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 400 }}>(Select the correct option)</span>
+                      </label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {(questionFormData.options || []).map((opt, oidx) => (
+                          <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newOpts = questionFormData.options.map((o, i) => ({ ...o, is_correct: i === oidx }));
+                                setQuestionFormData({ ...questionFormData, options: newOpts });
+                              }}
+                              style={{
+                                width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                                border: `2px solid ${opt.is_correct ? '#22c55e' : '#cbd5e1'}`,
+                                background: opt.is_correct ? '#22c55e' : '#fff',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              }}
+                              title="Mark as correct"
+                            >
+                              {opt.is_correct && <Check size={13} color="#ffffff" strokeWidth={3} />}
+                            </button>
+                            <span style={{ width: '22px', height: '22px', borderRadius: '6px', background: '#eef2ff', color: '#4f46e5', fontWeight: 800, fontSize: '0.78rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {String.fromCharCode(65 + oidx)}
+                            </span>
+                            <input
+                              type="text"
+                              placeholder={`Option ${String.fromCharCode(65 + oidx)}`}
+                              value={opt.option_text}
+                              onChange={(e) => {
+                                const newOpts = [...questionFormData.options];
+                                newOpts[oidx] = { ...newOpts[oidx], option_text: e.target.value };
+                                setQuestionFormData({ ...questionFormData, options: newOpts });
+                              }}
+                              style={{ flex: 1, height: '38px', padding: '0 0.75rem', fontSize: '0.9rem', border: `1.5px solid ${opt.is_correct ? '#86efac' : '#e2e8f0'}`, borderRadius: '7px', outline: 'none', background: opt.is_correct ? '#f0fdf4' : '#fff', fontFamily: 'inherit' }}
+                            />
+                            {questionFormData.options.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newOpts = questionFormData.options.filter((_, i) => i !== oidx);
+                                  if (!newOpts.some(o => o.is_correct)) newOpts[0].is_correct = true;
+                                  setQuestionFormData({ ...questionFormData, options: newOpts });
+                                }}
+                                style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#ef4444', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                title="Remove option"
+                              ><X size={14} /></button>
+                            )}
+                          </div>
+                        ))}
+                        {questionFormData.options.length < 6 && (
+                          <button
+                            type="button"
+                            onClick={() => setQuestionFormData({ ...questionFormData, options: [...questionFormData.options, { option_text: '', is_correct: false }] })}
+                            style={{ alignSelf: 'flex-start', padding: '0.35rem 0.9rem', background: '#f8fafc', border: '1.5px dashed #cbd5e1', borderRadius: '7px', color: '#64748b', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', marginTop: '0.15rem' }}
+                          >
+                            + Add Option
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '0.4rem' }}>
@@ -990,54 +1083,16 @@ const AssessmentManagement = () => {
                       placeholder="Provide the ideal explanation or answer summary..."
                       value={questionFormData.explanation}
                       onChange={(e) => setQuestionFormData({ ...questionFormData, explanation: e.target.value })}
-                      style={{
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '0.75rem 0.9rem',
-                        fontSize: '0.925rem',
-                        color: '#0f172a',
-                        background: '#ffffff',
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: '8px',
-                        outline: 'none',
-                        fontFamily: 'inherit',
-                        resize: 'vertical'
-                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '0.75rem 0.9rem', fontSize: '0.925rem', color: '#0f172a', background: '#ffffff', border: '1.5px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontFamily: 'inherit', resize: 'vertical' }}
                     />
                   </div>
-
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-                    <button
-                      type="button"
-                      onClick={handleCancelQuestionEdit}
-                      style={{
-                        padding: '0.6rem 1.25rem',
-                        background: '#ffffff',
-                        border: '1.5px solid #e2e8f0',
-                        borderRadius: '8px',
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        color: '#475569',
-                        cursor: 'pointer'
-                      }}
-                    >
+                    <button type="button" onClick={handleCancelQuestionEdit}
+                      style={{ padding: '0.6rem 1.25rem', background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontWeight: 600, fontSize: '0.875rem', color: '#475569', cursor: 'pointer' }}>
                       Cancel
                     </button>
-                    <button
-                      type="submit"
-                      disabled={savingQuestion}
-                      style={{
-                        padding: '0.6rem 1.5rem',
-                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontWeight: 700,
-                        fontSize: '0.875rem',
-                        color: '#ffffff',
-                        cursor: savingQuestion ? 'not-allowed' : 'pointer',
-                        boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)'
-                      }}
-                    >
+                    <button type="submit" disabled={savingQuestion}
+                      style={{ padding: '0.6rem 1.5rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '0.875rem', color: '#ffffff', cursor: savingQuestion ? 'not-allowed' : 'pointer', boxShadow: '0 2px 8px rgba(99, 102, 241, 0.3)' }}>
                       {savingQuestion ? 'Saving...' : editingQuestionItem ? 'Save Changes' : 'Add Question'}
                     </button>
                   </div>
@@ -1115,8 +1170,9 @@ const AssessmentManagement = () => {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
                     {assessmentQuestions.map((q, idx) => {
+                      const isMcq = q.question_type === 'mcq' || (q.options && q.options.length > 0 && q.question_type !== 'text');
                       let keywords = [];
-                      if (q.expected_keywords) {
+                      if (q.expected_keywords && !isMcq) {
                         try {
                           const parsed = JSON.parse(q.expected_keywords);
                           keywords = Array.isArray(parsed) ? parsed : q.expected_keywords.split(',').map(s => s.trim());
@@ -1138,25 +1194,14 @@ const AssessmentManagement = () => {
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{
-                                background: '#eef2ff',
-                                color: '#4f46e5',
-                                fontSize: '0.78rem',
-                                fontWeight: 800,
-                                padding: '0.2rem 0.65rem',
-                                borderRadius: '6px'
-                              }}>
+                              <span style={{ background: '#eef2ff', color: '#4f46e5', fontSize: '0.78rem', fontWeight: 800, padding: '0.2rem 0.65rem', borderRadius: '6px' }}>
                                 Question {q.question_order || idx + 1}
                               </span>
-                              <span style={{
-                                background: '#f1f5f9',
-                                color: '#475569',
-                                fontSize: '0.78rem',
-                                fontWeight: 700,
-                                padding: '0.2rem 0.55rem',
-                                borderRadius: '6px'
-                              }}>
+                              <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.78rem', fontWeight: 700, padding: '0.2rem 0.55rem', borderRadius: '6px' }}>
                                 {q.marks || 10} Marks
+                              </span>
+                              <span style={{ background: isMcq ? '#fef9c3' : '#ecfdf5', color: isMcq ? '#92400e' : '#065f46', fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '999px', border: `1px solid ${isMcq ? '#fde68a' : '#a7f3d0'}` }}>
+                                {isMcq ? 'MCQ' : 'Short Answer'}
                               </span>
                             </div>
 
@@ -1184,7 +1229,7 @@ const AssessmentManagement = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleDeleteQuestion(q.id)}
+                                onClick={() => setQuestionToDelete(q)}
                                 style={{
                                   background: '#fef2f2',
                                   border: '1px solid #fecaca',
@@ -1203,6 +1248,22 @@ const AssessmentManagement = () => {
                           <div style={{ fontSize: '0.925rem', fontWeight: 600, color: '#0f172a', lineHeight: 1.5, marginBottom: '0.65rem' }}>
                             {q.question_text}
                           </div>
+
+                          {/* MCQ Options display */}
+                          {isMcq && q.options && q.options.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.5rem' }}>
+                              {q.options.map((opt, oi) => (
+                                <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.3rem 0.6rem', borderRadius: '6px', background: opt.is_correct ? '#f0fdf4' : '#f8fafc', border: `1px solid ${opt.is_correct ? '#86efac' : '#e2e8f0'}` }}>
+                                  <span style={{ width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${opt.is_correct ? '#22c55e' : '#cbd5e1'}`, background: opt.is_correct ? '#22c55e' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    {opt.is_correct ? <Check size={12} color="#ffffff" strokeWidth={3} /> : null}
+                                  </span>
+                                  <span style={{ fontSize: '0.82rem', color: opt.is_correct ? '#065f46' : '#475569', fontWeight: opt.is_correct ? 700 : 500 }}>
+                                    {String.fromCharCode(65 + oi)}. {opt.option_text}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                           {keywords.length > 0 && (
                             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '5px', marginTop: '0.4rem' }}>
@@ -1328,6 +1389,122 @@ const AssessmentManagement = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Assessment Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(assessmentToDelete)}
+        onClose={() => setAssessmentToDelete(null)}
+        title="Delete Assessment"
+        subtitle="This action will permanently delete this assessment"
+        icon={<Trash2 size={20} color="#ef4444" />}
+        maxWidth="480px"
+      >
+        <div style={{ padding: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.95rem', color: '#1e293b', lineHeight: 1.5, margin: '0 0 1rem 0' }}>
+            Are you sure you want to delete the assessment <strong>&ldquo;{assessmentToDelete?.title}&rdquo;</strong>?
+          </p>
+
+          <div style={{
+            background: '#fff1f2',
+            border: '1px solid #fecdd3',
+            borderRadius: '10px',
+            padding: '0.85rem 1rem',
+            fontSize: '0.825rem',
+            color: '#be123c',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem'
+          }}>
+            <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            <span>All associated questions and candidate attempts for this assessment will be permanently deleted.</span>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+            <button
+              type="button"
+              onClick={() => setAssessmentToDelete(null)}
+              className="btn btn-secondary"
+              disabled={deleteLoading}
+              style={{ padding: '0.65rem 1.25rem' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDeleteAssessment}
+              className="btn btn-danger"
+              disabled={deleteLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.65rem 1.25rem',
+                fontWeight: 600
+              }}
+            >
+              <Trash2 size={15} />
+              <span>{deleteLoading ? 'Deleting...' : 'Yes, Delete Assessment'}</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Question Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(questionToDelete)}
+        onClose={() => setQuestionToDelete(null)}
+        title="Delete Question"
+        subtitle="Remove question from this assessment"
+        icon={<Trash2 size={20} color="#ef4444" />}
+        maxWidth="480px"
+      >
+        <div style={{ padding: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.95rem', color: '#1e293b', lineHeight: 1.5, margin: '0 0 1rem 0' }}>
+            Are you sure you want to delete this question?
+          </p>
+
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            padding: '0.75rem 1rem',
+            fontSize: '0.85rem',
+            color: '#334155',
+            marginBottom: '1rem',
+            fontStyle: 'italic'
+          }}>
+            &ldquo;{questionToDelete?.question_text}&rdquo;
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+            <button
+              type="button"
+              onClick={() => setQuestionToDelete(null)}
+              className="btn btn-secondary"
+              disabled={deleteLoading}
+              style={{ padding: '0.65rem 1.25rem' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDeleteQuestion}
+              className="btn btn-danger"
+              disabled={deleteLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.65rem 1.25rem',
+                fontWeight: 600
+              }}
+            >
+              <Trash2 size={15} />
+              <span>{deleteLoading ? 'Deleting...' : 'Yes, Delete Question'}</span>
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

@@ -4,7 +4,7 @@ import api from "../services/api";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
 import Modal from "../components/Modal";
-import { ArrowLeft, PlusCircle, Edit2, Trash2, CheckCircle2, HelpCircle, Info, Key } from "lucide-react";
+import { ArrowLeft, PlusCircle, Edit2, Trash2, CheckCircle2, HelpCircle, Info, Key, AlertCircle, Check, X } from "lucide-react";
 
 const QuestionManagement = () => {
   const { assessmentId } = useParams();
@@ -19,11 +19,22 @@ const QuestionManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [questionText, setQuestionText] = useState("");
+  const [questionType, setQuestionType] = useState("mcq");
+  const [options, setOptions] = useState([
+    { option_text: "", is_correct: true },
+    { option_text: "", is_correct: false },
+    { option_text: "", is_correct: false },
+    { option_text: "", is_correct: false }
+  ]);
   const [marks, setMarks] = useState(10);
   const [questionOrder, setQuestionOrder] = useState(1);
   const [expectedKeywords, setExpectedKeywords] = useState("");
   const [explanation, setExplanation] = useState("");
   const [modalLoading, setModalLoading] = useState(false);
+
+  // Delete Confirmation State
+  const [questionToDelete, setQuestionToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => { fetchQuestions(); }, [assessmentId]);
 
@@ -46,6 +57,13 @@ const QuestionManagement = () => {
   const openAddModal = () => {
     setEditingQuestion(null);
     setQuestionText("");
+    setQuestionType("mcq");
+    setOptions([
+      { option_text: "", is_correct: true },
+      { option_text: "", is_correct: false },
+      { option_text: "", is_correct: false },
+      { option_text: "", is_correct: false }
+    ]);
     setMarks(10);
     setQuestionOrder(questions.length + 1);
     setExpectedKeywords("");
@@ -57,6 +75,18 @@ const QuestionManagement = () => {
   const openEditModal = (q) => {
     setEditingQuestion(q);
     setQuestionText(q.question_text);
+    const qType = q.question_type || (q.options && q.options.length > 0 ? "mcq" : "text");
+    setQuestionType(qType);
+    setOptions(
+      q.options && q.options.length > 0
+        ? q.options.map((o) => ({ option_text: o.option_text, is_correct: Boolean(o.is_correct) }))
+        : [
+            { option_text: "", is_correct: true },
+            { option_text: "", is_correct: false },
+            { option_text: "", is_correct: false },
+            { option_text: "", is_correct: false }
+          ]
+    );
     setMarks(q.marks || 10);
     setQuestionOrder(q.question_order || 1);
     setExpectedKeywords(q.expected_keywords || "");
@@ -69,12 +99,26 @@ const QuestionManagement = () => {
     e.preventDefault();
     if (!questionText.trim()) { setError("Question text is required."); return; }
 
+    if (questionType === "mcq") {
+      const validOpts = options.filter((o) => o.option_text.trim());
+      if (validOpts.length < 2) {
+        setError("Please provide at least 2 options for an MCQ question.");
+        return;
+      }
+      if (!validOpts.some((o) => o.is_correct)) {
+        setError("Please mark one option as correct.");
+        return;
+      }
+    }
+
     const payload = {
       assessment_id: assessmentId,
       question_text: questionText.trim(),
+      question_type: questionType,
       marks: Number(marks) || 10,
       question_order: Number(questionOrder) || 1,
-      expected_keywords: expectedKeywords.trim(),
+      expected_keywords: questionType === "text" ? expectedKeywords.trim() : "",
+      options: questionType === "mcq" ? options : [],
       explanation: explanation.trim()
     };
 
@@ -98,15 +142,19 @@ const QuestionManagement = () => {
     }
   };
 
-  const handleDeleteQuestion = async (qId) => {
-    if (!window.confirm("Are you sure you want to delete this question?")) return;
+  const handleConfirmDeleteQuestion = async () => {
+    if (!questionToDelete) return;
     try {
-      await api.delete(`/admin/questions/${qId}`);
+      setDeleteLoading(true);
+      await api.delete(`/admin/questions/${questionToDelete.id}`);
       setSuccessMsg("Question deleted successfully.");
+      setQuestionToDelete(null);
       fetchQuestions();
       setTimeout(() => setSuccessMsg(""), 4000);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete question.");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -162,16 +210,21 @@ const QuestionManagement = () => {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {questions.map((q, idx) => (
+              {questions.map((q, idx) => {
+                const isMcq = q.question_type === "mcq" || (q.options && q.options.length > 0 && q.question_type !== "text");
+                return (
                 <div key={q.id} style={{ background: "var(--bg-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-light)", padding: "1.5rem", boxShadow: "var(--shadow-sm)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                       <span style={{ backgroundColor: "var(--primary-light)", color: "var(--primary)", padding: "0.25rem 0.65rem", borderRadius: "var(--radius-sm)", fontWeight: 700, fontSize: "0.85rem" }}>Q{idx + 1}</span>
                       <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 600 }}>{q.marks} Mark{q.marks > 1 ? "s" : ""}</span>
+                      <span style={{ background: isMcq ? "#fef9c3" : "#ecfdf5", color: isMcq ? "#92400e" : "#065f46", fontSize: "0.72rem", fontWeight: 700, padding: "0.15rem 0.55rem", borderRadius: "999px", border: `1px solid ${isMcq ? "#fde68a" : "#a7f3d0"}` }}>
+                        {isMcq ? "MCQ" : "Short Answer"}
+                      </span>
                     </div>
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                       <button onClick={() => openEditModal(q)} className="btn btn-secondary btn-sm" title="Edit Question"><Edit2 size={14} /></button>
-                      <button onClick={() => handleDeleteQuestion(q.id)} className="btn btn-danger btn-sm" title="Delete Question"><Trash2 size={14} /></button>
+                      <button onClick={() => setQuestionToDelete(q)} className="btn btn-danger btn-sm" title="Delete Question"><Trash2 size={14} /></button>
                     </div>
                   </div>
 
@@ -179,7 +232,22 @@ const QuestionManagement = () => {
                     {q.question_text}
                   </div>
 
-                  {q.expected_keywords && (
+                  {isMcq && q.options && q.options.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: q.explanation ? "0.85rem" : 0 }}>
+                      {q.options.map((opt, oi) => (
+                        <div key={oi} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0.45rem 0.75rem", borderRadius: "8px", background: opt.is_correct ? "#f0fdf4" : "#f8fafc", border: `1px solid ${opt.is_correct ? "#86efac" : "#e2e8f0"}` }}>
+                          <span style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${opt.is_correct ? "#22c55e" : "#cbd5e1"}`, background: opt.is_correct ? "#22c55e" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {opt.is_correct ? <Check size={12} color="#ffffff" strokeWidth={3} /> : null}
+                          </span>
+                          <span style={{ fontSize: "0.875rem", color: opt.is_correct ? "#065f46" : "#475569", fontWeight: opt.is_correct ? 700 : 500 }}>
+                            {String.fromCharCode(65 + oi)}. {opt.option_text}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!isMcq && q.expected_keywords && (
                     <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", background: "var(--bg-subtle)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", padding: "0.65rem 1rem", marginBottom: q.explanation ? "0.75rem" : 0, fontSize: "0.85rem" }}>
                       <Key size={14} color="var(--primary)" style={{ flexShrink: 0, marginTop: "2px" }} />
                       <div>
@@ -196,7 +264,7 @@ const QuestionManagement = () => {
                     </div>
                   )}
                 </div>
-              ))}
+              );})}
             </div>
           )}
         </div>
@@ -219,6 +287,34 @@ const QuestionManagement = () => {
               onChange={(e) => setQuestionText(e.target.value)} className="input-field" />
           </div>
 
+          <div className="form-group" style={{ marginBottom: "1rem" }}>
+            <label className="form-label">Question Type *</label>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {[
+                { val: "mcq", label: "Multiple Choice (MCQ)" },
+                { val: "text", label: "Short Answer" }
+              ].map(({ val, label }) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setQuestionType(val)}
+                  style={{
+                    padding: "0.5rem 1rem",
+                    borderRadius: "8px",
+                    border: `2px solid ${questionType === val ? "#6366f1" : "#e2e8f0"}`,
+                    background: questionType === val ? "#eef2ff" : "#f8fafc",
+                    color: questionType === val ? "#4f46e5" : "#64748b",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                    cursor: "pointer"
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
             <div className="form-group">
               <label className="form-label">Marks *</label>
@@ -230,17 +326,82 @@ const QuestionManagement = () => {
             </div>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">
-              Expected Keywords
-              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.5rem" }}>(comma-separated, used for auto-scoring)</span>
-            </label>
-            <input type="text" placeholder="e.g. ROI, conversion rate, A/B testing, campaign optimization"
-              value={expectedKeywords} onChange={(e) => setExpectedKeywords(e.target.value)} className="input-field" />
-            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.3rem" }}>
-              Candidate answers are scored based on how many of these keywords they include.
-            </p>
-          </div>
+          {questionType === "mcq" ? (
+            <div className="form-group" style={{ marginBottom: "1rem" }}>
+              <label className="form-label">
+                Answer Options
+                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.5rem" }}>(Select the correct option)</span>
+              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {options.map((opt, oidx) => (
+                  <div key={oidx} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => setOptions(options.map((o, i) => ({ ...o, is_correct: i === oidx })))}
+                      style={{
+                        width: "22px", height: "22px", borderRadius: "50%", flexShrink: 0,
+                        border: `2px solid ${opt.is_correct ? "#22c55e" : "#cbd5e1"}`,
+                        background: opt.is_correct ? "#22c55e" : "#fff",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
+                      }}
+                      title="Mark as correct"
+                    >
+                      {opt.is_correct && <Check size={13} color="#ffffff" strokeWidth={3} />}
+                    </button>
+                    <span style={{ width: "22px", height: "22px", borderRadius: "6px", background: "#eef2ff", color: "#4f46e5", fontWeight: 800, fontSize: "0.78rem", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {String.fromCharCode(65 + oidx)}
+                    </span>
+                    <input
+                      type="text"
+                      placeholder={`Option ${String.fromCharCode(65 + oidx)}`}
+                      value={opt.option_text}
+                      onChange={(e) => {
+                        const newOpts = [...options];
+                        newOpts[oidx] = { ...newOpts[oidx], option_text: e.target.value };
+                        setOptions(newOpts);
+                      }}
+                      className="input-field"
+                      style={{ flex: 1, marginBottom: 0, background: opt.is_correct ? "#f0fdf4" : undefined, borderColor: opt.is_correct ? "#86efac" : undefined }}
+                    />
+                    {options.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newOpts = options.filter((_, i) => i !== oidx);
+                          if (!newOpts.some((o) => o.is_correct)) newOpts[0].is_correct = true;
+                          setOptions(newOpts);
+                        }}
+                        style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "6px", padding: "0.4rem 0.5rem", color: "#ef4444", cursor: "pointer", display: "flex", alignItems: "center" }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {options.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={() => setOptions([...options, { option_text: "", is_correct: false }])}
+                    style={{ alignSelf: "flex-start", padding: "0.35rem 0.9rem", background: "#f8fafc", border: "1.5px dashed #cbd5e1", borderRadius: "7px", color: "#64748b", fontWeight: 600, fontSize: "0.82rem", cursor: "pointer", marginTop: "0.2rem" }}
+                  >
+                    + Add Option
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="form-group">
+              <label className="form-label">
+                Expected Keywords
+                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontWeight: 400, marginLeft: "0.5rem" }}>(comma-separated, used for auto-scoring)</span>
+              </label>
+              <input type="text" placeholder="e.g. ROI, conversion rate, A/B testing, campaign optimization"
+                value={expectedKeywords} onChange={(e) => setExpectedKeywords(e.target.value)} className="input-field" />
+              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "0.3rem" }}>
+                Candidate answers are scored based on how many of these keywords they include.
+              </p>
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">
@@ -258,6 +419,56 @@ const QuestionManagement = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Question Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(questionToDelete)}
+        onClose={() => setQuestionToDelete(null)}
+        title="Delete Question"
+        subtitle="This action will permanently delete this question"
+        icon={<Trash2 size={20} color="#ef4444" />}
+        maxWidth="480px"
+      >
+        <div style={{ padding: "0.25rem 0" }}>
+          <p style={{ fontSize: "0.95rem", color: "#1e293b", lineHeight: 1.5, margin: "0 0 1rem 0" }}>
+            Are you sure you want to delete this question?
+          </p>
+
+          <div style={{
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: "8px",
+            padding: "0.75rem 1rem",
+            fontSize: "0.85rem",
+            color: "#334155",
+            marginBottom: "1rem",
+            fontStyle: "italic"
+          }}>
+            &ldquo;{questionToDelete?.question_text}&rdquo;
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.5rem" }}>
+            <button
+              type="button"
+              onClick={() => setQuestionToDelete(null)}
+              className="btn btn-secondary"
+              disabled={deleteLoading}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDeleteQuestion}
+              className="btn btn-danger"
+              disabled={deleteLoading}
+              style={{ display: "flex", alignItems: "center", gap: "0.45rem" }}
+            >
+              <Trash2 size={15} />
+              <span>{deleteLoading ? "Deleting..." : "Yes, Delete Question"}</span>
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

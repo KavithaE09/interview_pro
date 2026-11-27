@@ -167,7 +167,7 @@ const getAssessmentDetailsWithQuestions = async (req, res) => {
     const assessment = assessments[0];
 
     const [questions] = await pool.query(`
-      SELECT id, question_text, marks, question_order, explanation, expected_keywords
+      SELECT id, question_text, marks, question_order, explanation, expected_keywords, question_type
       FROM questions
       WHERE assessment_id = ?
       ORDER BY question_order ASC, id ASC
@@ -337,29 +337,57 @@ const addQuestion = async (req, res) => {
       marks = 10,
       question_order = 1,
       explanation = '',
-      expected_keywords = ''
+      expected_keywords = '',
+      question_type = 'mcq',
+      options = []
     } = req.body;
 
     if (!assessment_id || !question_text || !question_text.trim()) {
       return res.status(400).json({ success: false, message: 'Assessment ID and question text are required.' });
     }
 
+    let kw = expected_keywords;
+    if (Array.isArray(kw)) {
+      kw = kw.join(', ');
+    }
+
+    const type = question_type === 'text' ? 'text' : 'mcq';
+
     const [qResult] = await pool.query(`
-      INSERT INTO questions (assessment_id, question_text, marks, question_order, explanation, expected_keywords)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO questions (assessment_id, question_text, marks, question_order, explanation, expected_keywords, question_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
       assessment_id,
       question_text.trim(),
       Number(marks) || 10,
       Number(question_order) || 1,
       explanation || '',
-      expected_keywords.trim() || null
+      kw ? String(kw).trim() : null,
+      type
     ]);
+
+    const questionId = qResult.insertId;
+
+    // If MCQ and options provided, insert options
+    if (type === 'mcq' && Array.isArray(options) && options.length > 0) {
+      for (const opt of options) {
+        if (opt.option_text && opt.option_text.trim()) {
+          await pool.query(`
+            INSERT INTO question_options (question_id, option_text, is_correct)
+            VALUES (?, ?, ?)
+          `, [
+            questionId,
+            opt.option_text.trim(),
+            opt.is_correct ? 1 : 0
+          ]);
+        }
+      }
+    }
 
     return res.status(201).json({
       success: true,
       message: 'Question added successfully.',
-      questionId: qResult.insertId
+      questionId
     });
   } catch (error) {
     console.error('Error adding question:', error);
@@ -375,12 +403,21 @@ const updateQuestion = async (req, res) => {
       marks,
       question_order,
       explanation,
-      expected_keywords
+      expected_keywords,
+      question_type = 'mcq',
+      options = []
     } = req.body;
 
     if (!question_text || !question_text.trim()) {
       return res.status(400).json({ success: false, message: 'Question text is required.' });
     }
+
+    let kw = expected_keywords;
+    if (Array.isArray(kw)) {
+      kw = kw.join(', ');
+    }
+
+    const type = question_type === 'text' ? 'text' : 'mcq';
 
     await pool.query(`
       UPDATE questions
@@ -389,16 +426,35 @@ const updateQuestion = async (req, res) => {
         marks = ?,
         question_order = ?,
         explanation = ?,
-        expected_keywords = ?
+        expected_keywords = ?,
+        question_type = ?
       WHERE id = ?
     `, [
       question_text.trim(),
       Number(marks) || 10,
       Number(question_order) || 1,
       explanation || '',
-      expected_keywords !== undefined ? String(expected_keywords).trim() : null,
+      kw !== undefined ? (kw ? String(kw).trim() : null) : null,
+      type,
       id
     ]);
+
+    // Update options: delete existing options and insert updated ones if type === 'mcq'
+    await pool.query('DELETE FROM question_options WHERE question_id = ?', [id]);
+    if (type === 'mcq' && Array.isArray(options) && options.length > 0) {
+      for (const opt of options) {
+        if (opt.option_text && opt.option_text.trim()) {
+          await pool.query(`
+            INSERT INTO question_options (question_id, option_text, is_correct)
+            VALUES (?, ?, ?)
+          `, [
+            id,
+            opt.option_text.trim(),
+            opt.is_correct ? 1 : 0
+          ]);
+        }
+      }
+    }
 
     return res.status(200).json({ success: true, message: 'Question updated successfully.' });
   } catch (error) {

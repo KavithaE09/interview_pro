@@ -12,9 +12,11 @@ CREATE TABLE IF NOT EXISTS `users` (
   `phone` VARCHAR(25) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
   `role` ENUM('admin', 'candidate') DEFAULT 'candidate',
+  `category_id` INT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX `idx_users_email` (`email`),
-  INDEX `idx_users_role` (`role`)
+  INDEX `idx_users_role` (`role`),
+  INDEX `idx_users_category` (`category_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 2. Categories Table
@@ -63,6 +65,7 @@ CREATE TABLE IF NOT EXISTS `assessment_assignments` (
 CREATE TABLE IF NOT EXISTS `questions` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `assessment_id` INT NOT NULL,
+  `question_type` VARCHAR(20) DEFAULT 'mcq',
   `question_text` TEXT NOT NULL,
   `marks` INT NOT NULL DEFAULT 10,
   `question_order` INT NOT NULL DEFAULT 1,

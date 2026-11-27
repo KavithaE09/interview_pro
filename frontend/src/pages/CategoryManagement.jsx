@@ -18,6 +18,10 @@ const CategoryManagement = () => {
   const [description, setDescription] = useState('');
   const [modalLoading, setModalLoading] = useState(false);
 
+  // Delete Confirmation State
+  const [categoryToDelete, setCategoryToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   useEffect(() => {
     fetchCategories();
   }, []);
@@ -88,18 +92,20 @@ const CategoryManagement = () => {
     }
   };
 
-  const handleDeleteCategory = async (catId) => {
-    if (!window.confirm('Are you sure you want to delete this category? Assessments under it will have category set to null.')) {
-      return;
-    }
+  const handleConfirmDelete = async () => {
+    if (!categoryToDelete) return;
 
     try {
-      await api.delete(`/admin/categories/${catId}`);
-      setSuccessMsg('Category deleted successfully.');
+      setDeleteLoading(true);
+      await api.delete(`/admin/categories/${categoryToDelete.id}`);
+      setSuccessMsg(`Category "${categoryToDelete.category_name}" deleted successfully.`);
+      setCategoryToDelete(null);
       fetchCategories();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete category.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -209,7 +215,7 @@ const CategoryManagement = () => {
                         </td>
                         <td>
                           <span className="badge badge-neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <FileCheck size={12} />
+                            
                             <span>{cat.assessment_count || 0} Assessments</span>
                           </span>
                         </td>
@@ -226,7 +232,7 @@ const CategoryManagement = () => {
                               <Edit2 size={14} />
                             </button>
                             <button
-                              onClick={() => handleDeleteCategory(cat.id)}
+                              onClick={() => setCategoryToDelete(cat)}
                               className="btn btn-danger btn-sm"
                               title="Delete Category"
                             >
@@ -359,6 +365,65 @@ const CategoryManagement = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={Boolean(categoryToDelete)}
+        onClose={() => setCategoryToDelete(null)}
+        title="Delete Category"
+        subtitle="This action will permanently delete this category"
+        icon={<Trash2 size={20} color="#ef4444" />}
+        maxWidth="480px"
+      >
+        <div style={{ padding: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.95rem', color: '#1e293b', lineHeight: 1.5, margin: '0 0 1rem 0' }}>
+            Are you sure you want to delete the category <strong>&ldquo;{categoryToDelete?.category_name}&rdquo;</strong>?
+          </p>
+
+          <div style={{
+            background: '#fff1f2',
+            border: '1px solid #fecdd3',
+            borderRadius: '10px',
+            padding: '0.85rem 1rem',
+            fontSize: '0.825rem',
+            color: '#be123c',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.65rem'
+          }}>
+            <AlertCircle size={18} style={{ flexShrink: 0 }} />
+            <span>Assessments currently under this category will have their category removed.</span>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+            <button
+              type="button"
+              onClick={() => setCategoryToDelete(null)}
+              className="btn btn-secondary"
+              disabled={deleteLoading}
+              style={{ padding: '0.65rem 1.25rem' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDelete}
+              className="btn btn-danger"
+              disabled={deleteLoading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                padding: '0.65rem 1.25rem',
+                fontWeight: 600
+              }}
+            >
+              <Trash2 size={15} />
+              <span>{deleteLoading ? 'Deleting...' : 'Yes, Delete Category'}</span>
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

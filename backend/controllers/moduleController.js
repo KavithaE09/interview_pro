@@ -1,17 +1,23 @@
 const pool = require('../config/db');
 
-// Helper to convert standard YouTube URLs into embed URLs
+// Helper to format video or course URLs (YouTube, Vimeo, Udemy, Website courses)
 const formatYouTubeEmbed = (url) => {
   if (!url) return '';
   const trimmed = url.trim();
   if (trimmed.includes('youtube.com/embed/')) {
     return trimmed;
   }
-  // Standard watch URL: youtube.com/watch?v=VIDEO_ID
+  // Standard watch URL: youtube.com/watch?v=VIDEO_ID or youtu.be/VIDEO_ID
   const watchMatch = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   if (watchMatch && watchMatch[1]) {
     return `https://www.youtube.com/embed/${watchMatch[1]}`;
   }
+  // Vimeo URL
+  const vimeoMatch = trimmed.match(/vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|)(\d+)/i);
+  if (vimeoMatch && vimeoMatch[3]) {
+    return `https://player.vimeo.com/video/${vimeoMatch[3]}`;
+  }
+  // Any website, Udemy course, or external learning URL
   return trimmed;
 };
 
@@ -114,7 +120,7 @@ const createModule = async (req, res) => {
     }
 
     if (!video_url || !video_url.trim()) {
-      return res.status(400).json({ success: false, message: 'YouTube video URL is required.' });
+      return res.status(400).json({ success: false, message: 'Learning URL (YouTube, Udemy, course, or website link) is required.' });
     }
 
     const formattedVideo = formatYouTubeEmbed(video_url);
@@ -164,7 +170,7 @@ const updateModule = async (req, res) => {
     }
 
     if (!video_url || !video_url.trim()) {
-      return res.status(400).json({ success: false, message: 'YouTube video URL is required.' });
+      return res.status(400).json({ success: false, message: 'Learning URL (YouTube, Udemy, course, or website link) is required.' });
     }
 
     const formattedVideo = formatYouTubeEmbed(video_url);
@@ -235,14 +241,41 @@ const getCandidateDashboardData = async (req, res) => {
   try {
     const candidateId = req.user.id;
 
-    // A. Candidate Profile
-    const [userRows] = await pool.query('SELECT id, name, email, phone, role FROM users WHERE id = ?', [candidateId]);
+    // A. Candidate Profile with Category
+    const [userRows] = await pool.query(`
+      SELECT u.id, u.name, u.email, u.phone, u.role, u.category_id, c.category_name 
+      FROM users u
+      LEFT JOIN categories c ON u.category_id = c.id
+      WHERE u.id = ?
+    `, [candidateId]);
+
     if (userRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Candidate account not found.' });
     }
     const candidate = userRows[0];
 
-    // B. Modules with Candidate Progress
+    // Ensure candidate has assignments for all published assessments in their chosen category
+    if (candidate.category_id) {
+      const [publishedCatAsms] = await pool.query(
+        'SELECT id FROM assessments WHERE status = "published" AND category_id = ?',
+        [candidate.category_id]
+      );
+      for (const asm of publishedCatAsms) {
+        await pool.query(
+          'INSERT IGNORE INTO assessment_assignments (assessment_id, candidate_id, status) VALUES (?, ?, "assigned")',
+          [asm.id, candidateId]
+        );
+      }
+    }
+
+    // B. Modules with Candidate Progress (Filtered by candidate's chosen category if selected)
+    let moduleWhere = '';
+    const moduleParams = [candidateId];
+    if (candidate.category_id) {
+      moduleWhere = 'WHERE (m.category_id = ? OR m.category_id IS NULL)';
+      moduleParams.push(candidate.category_id);
+    }
+
     const [modules] = await pool.query(`
       SELECT 
         m.id,
@@ -262,10 +295,19 @@ const getCandidateDashboardData = async (req, res) => {
       LEFT JOIN categories c ON m.category_id = c.id
       LEFT JOIN assessments a ON m.assessment_id = a.id
       LEFT JOIN candidate_module_progress cmp ON cmp.module_id = m.id AND cmp.candidate_id = ?
+      ${moduleWhere}
       ORDER BY m.order_index ASC, m.id ASC
-    `, [candidateId]);
+    `, moduleParams);
 
     // C. Assigned Assessments with Category, Question Count & Attempt Status
+    // Filter strictly to the candidate's chosen category
+    let asmWhere = 'WHERE aa.candidate_id = ? AND a.status = "published"';
+    const asmParams = [candidateId];
+    if (candidate.category_id) {
+      asmWhere += ' AND a.category_id = ?';
+      asmParams.push(candidate.category_id);
+    }
+
     const [assignments] = await pool.query(`
       SELECT 
         aa.id AS assignment_id,
@@ -294,9 +336,9 @@ const getCandidateDashboardData = async (req, res) => {
         GROUP BY assignment_id
       ) latest_att ON latest_att.assignment_id = aa.id
       LEFT JOIN assessment_attempts att ON att.id = latest_att.max_id
-      WHERE aa.candidate_id = ? AND a.status = 'published'
+      ${asmWhere}
       ORDER BY aa.assigned_at DESC, a.id DESC
-    `, [candidateId]);
+    `, asmParams);
 
     return res.json({
       success: true,
@@ -310,6 +352,31 @@ const getCandidateDashboardData = async (req, res) => {
   }
 };
 
+// 8. Upload Module Resource File (CheatSheet, PDF, Excel, Document, etc.)
+const uploadModuleResource = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Please select a file to upload.' });
+    }
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+    const fileSizeFormatted = req.file.size > 1024 * 1024
+      ? (req.file.size / (1024 * 1024)).toFixed(2) + ' MB'
+      : (req.file.size / 1024).toFixed(1) + ' KB';
+
+    return res.status(200).json({
+      success: true,
+      message: 'File uploaded successfully!',
+      file_url: fileUrl,
+      file_name: req.file.originalname,
+      file_size: fileSizeFormatted
+    });
+  } catch (err) {
+    console.error('Error in uploadModuleResource:', err);
+    return res.status(500).json({ success: false, message: 'Server error while uploading resource file.' });
+  }
+};
+
 module.exports = {
   getModules,
   getModuleById,
@@ -317,5 +384,6 @@ module.exports = {
   updateModule,
   deleteModule,
   markModuleCompleted,
-  getCandidateDashboardData
+  getCandidateDashboardData,
+  uploadModuleResource
 };

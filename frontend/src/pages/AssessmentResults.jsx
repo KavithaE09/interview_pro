@@ -1274,28 +1274,87 @@ const AssessmentResults = ({ isAdminView = false }) => {
                           {q.questionText}
                         </div>
 
-                        {/* Candidate Written Answer */}
-                        <div style={{ marginBottom: '1.25rem' }}>
-                          <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
-                            Candidate Answer:
+                        {/* Candidate Answer: MCQ Options or Written Answer */}
+                        {q.questionType === 'mcq' && q.options && q.options.length > 0 ? (
+                          <div style={{ marginBottom: '1.25rem' }}>
+                            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>
+                              Options &amp; Selected Answer:
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {q.options.map((opt, oIdx) => {
+                                const isSelected = q.selectedOptionId === opt.id;
+                                const isCorrect = Boolean(opt.is_correct);
+                                let bg = '#f8fafc';
+                                let border = '1px solid var(--border-light)';
+                                let color = 'var(--text-main)';
+                                if (isCorrect) {
+                                  bg = '#f0fdf4';
+                                  border = '1.5px solid #86efac';
+                                  color = '#065f46';
+                                } else if (isSelected && !isCorrect) {
+                                  bg = '#fef2f2';
+                                  border = '1.5px solid #fca5a5';
+                                  color = '#991b1b';
+                                }
+                                return (
+                                  <div
+                                    key={opt.id}
+                                    style={{
+                                      padding: '0.65rem 1rem',
+                                      borderRadius: 'var(--radius-sm)',
+                                      backgroundColor: bg,
+                                      border,
+                                      color,
+                                      fontSize: '0.9rem',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      gap: '0.75rem'
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: isSelected || isCorrect ? 700 : 500 }}>
+                                      {String.fromCharCode(65 + oIdx)}. {opt.option_text}
+                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, fontSize: '0.75rem', fontWeight: 700 }}>
+                                      {isSelected && (
+                                        <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', background: isCorrect ? '#dcfce7' : '#fee2e2', color: isCorrect ? '#166534' : '#991b1b' }}>
+                                          Your Choice
+                                        </span>
+                                      )}
+                                      {isCorrect && (
+                                        <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', background: '#dcfce7', color: '#166534' }}>
+                                          Correct Answer
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div style={{
-                            padding: '1rem 1.15rem',
-                            backgroundColor: isUnanswered ? '#f9fafb' : '#f8fafc',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-light)',
-                            color: isUnanswered ? 'var(--text-light)' : 'var(--text-main)',
-                            fontSize: '0.925rem',
-                            lineHeight: 1.6,
-                            whiteSpace: 'pre-wrap',
-                            fontStyle: isUnanswered ? 'italic' : 'normal'
-                          }}>
-                            {isUnanswered ? 'No answer submitted.' : q.candidateAnswer}
+                        ) : (
+                          <div style={{ marginBottom: '1.25rem' }}>
+                            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>
+                              Candidate Answer:
+                            </div>
+                            <div style={{
+                              padding: '1rem 1.15rem',
+                              backgroundColor: isUnanswered ? '#f9fafb' : '#f8fafc',
+                              borderRadius: 'var(--radius-sm)',
+                              border: '1px solid var(--border-light)',
+                              color: isUnanswered ? 'var(--text-light)' : 'var(--text-main)',
+                              fontSize: '0.925rem',
+                              lineHeight: 1.6,
+                              whiteSpace: 'pre-wrap',
+                              fontStyle: isUnanswered ? 'italic' : 'normal'
+                            }}>
+                              {isUnanswered ? 'No answer submitted.' : q.candidateAnswer}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
-                        {/* Matched Keywords */}
-                        {q.matchedKeywords && q.matchedKeywords.length > 0 && (
+                        {/* Matched Keywords (only for text questions) */}
+                        {q.questionType !== 'mcq' && q.matchedKeywords && q.matchedKeywords.length > 0 && (
                           <div style={{ marginBottom: '1rem' }}>
                             <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#065f46', marginBottom: '0.35rem' }}>
                               ✓ Detected Keywords / Concepts:

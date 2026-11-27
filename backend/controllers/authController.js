@@ -140,7 +140,12 @@ const login = async (req, res) => {
 // 3. Get Current Profile
 const getProfile = async (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT id, name, email, phone, role, created_at FROM users WHERE id = ?', [req.user.id]);
+    const [rows] = await pool.query(`
+      SELECT u.id, u.name, u.email, u.phone, u.role, u.category_id, c.category_name, u.created_at 
+      FROM users u
+      LEFT JOIN categories c ON u.category_id = c.id
+      WHERE u.id = ?
+    `, [req.user.id]);
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
@@ -250,10 +255,10 @@ const registerAdmin = async (req, res) => {
   }
 };
 
-// Candidate Quick Login (No registration or password needed - just Name & Email, Phone is Optional)
+// Candidate Quick Login with Category Selection
 const candidateLogin = async (req, res) => {
   try {
-    const { name, email, phone } = req.body;
+    const { name, email, phone, categoryId } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Candidate full name is required.' });
@@ -280,48 +285,66 @@ const candidateLogin = async (req, res) => {
     }
     const validatedPhone = phoneValidation.phone; // valid 10-digit string OR null
 
+    // Validate category selection
+    if (!categoryId) {
+      return res.status(400).json({ success: false, message: 'Please select an assessment category.' });
+    }
+
+    const [categoryRows] = await pool.query('SELECT id, category_name FROM categories WHERE id = ?', [Number(categoryId)]);
+    if (categoryRows.length === 0) {
+      return res.status(400).json({ success: false, message: 'Selected assessment category does not exist.' });
+    }
+    const selectedCategory = categoryRows[0];
+
     // Check if candidate exists
     const [existing] = await pool.query('SELECT * FROM users WHERE email = ?', [emailTrimmed]);
     let candidateUser;
 
     if (existing.length > 0) {
       candidateUser = existing[0];
-      // Only update phone if candidate explicitly entered a valid phone number
+      // Update name, category_id, and phone (if provided)
       if (validatedPhone) {
-        await pool.query('UPDATE users SET name = ?, phone = ? WHERE id = ?', [
+        await pool.query('UPDATE users SET name = ?, phone = ?, category_id = ? WHERE id = ?', [
           nameTrimmed,
           validatedPhone,
+          selectedCategory.id,
           candidateUser.id
         ]);
         candidateUser.phone = validatedPhone;
       } else {
-        await pool.query('UPDATE users SET name = ? WHERE id = ?', [
+        await pool.query('UPDATE users SET name = ?, category_id = ? WHERE id = ?', [
           nameTrimmed,
+          selectedCategory.id,
           candidateUser.id
         ]);
       }
       candidateUser.name = nameTrimmed;
+      candidateUser.category_id = selectedCategory.id;
     } else {
       const [insertResult] = await pool.query(
-        'INSERT INTO users (name, email, phone, role) VALUES (?, ?, ?, "candidate")',
-        [nameTrimmed, emailTrimmed, validatedPhone]
+        'INSERT INTO users (name, email, phone, role, category_id) VALUES (?, ?, ?, "candidate", ?)',
+        [nameTrimmed, emailTrimmed, validatedPhone, selectedCategory.id]
       );
       candidateUser = {
         id: insertResult.insertId,
         name: nameTrimmed,
         email: emailTrimmed,
         phone: validatedPhone,
-        role: 'candidate'
+        role: 'candidate',
+        category_id: selectedCategory.id
       };
+    }
 
-      // Auto-assign any active published assessments to new candidate
-      const [publishedAssessments] = await pool.query('SELECT id FROM assessments WHERE status = "published"');
-      for (const asm of publishedAssessments) {
-        await pool.query(
-          'INSERT IGNORE INTO assessment_assignments (assessment_id, candidate_id, status) VALUES (?, ?, "assigned")',
-          [asm.id, candidateUser.id]
-        );
-      }
+    // Auto-assign any active published assessments strictly belonging to the chosen category
+    const [publishedAssessments] = await pool.query(
+      'SELECT id FROM assessments WHERE status = "published" AND category_id = ?',
+      [selectedCategory.id]
+    );
+    for (const asm of publishedAssessments) {
+      await pool.query(
+        'INSERT IGNORE INTO assessment_assignments (assessment_id, candidate_id, status) VALUES (?, ?, "assigned")',
+        [asm.id, candidateUser.id]
+      );
     }
 
     const userPayload = {
@@ -329,7 +352,9 @@ const candidateLogin = async (req, res) => {
       name: candidateUser.name,
       email: candidateUser.email,
       phone: candidateUser.phone,
-      role: 'candidate'
+      role: 'candidate',
+      category_id: selectedCategory.id,
+      category_name: selectedCategory.category_name
     };
 
     const token = generateToken(userPayload);
@@ -346,11 +371,31 @@ const candidateLogin = async (req, res) => {
   }
 };
 
+// Public endpoint to get available categories with published assessment counts
+const getPublicCategories = async (req, res) => {
+  try {
+    const [categories] = await pool.query(`
+      SELECT 
+        c.id, 
+        c.category_name, 
+        c.description,
+        (SELECT COUNT(*) FROM assessments a WHERE a.category_id = c.id AND a.status = 'published') AS assessment_count
+      FROM categories c
+      ORDER BY c.category_name ASC
+    `);
+    return res.status(200).json({ success: true, categories });
+  } catch (err) {
+    console.error('Error fetching public categories:', err);
+    return res.status(500).json({ success: false, message: 'Server error retrieving categories.' });
+  }
+};
+
 module.exports = {
   register,
   registerAdmin,
   login,
   candidateLogin,
   getProfile,
-  updateProfile
+  updateProfile,
+  getPublicCategories
 };
